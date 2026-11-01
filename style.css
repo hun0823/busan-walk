@@ -1,0 +1,33 @@
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#0b1530;font-family:system-ui,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;color:#fff;touch-action:none;user-select:none;-webkit-user-select:none}
+#app canvas{display:block}
+.glass{position:fixed;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);border-radius:999px;box-shadow:0 6px 24px rgba(0,0,0,.25);z-index:5}
+.top-left{top:16px;left:16px;padding:10px 20px;font-size:17px;font-weight:600;display:flex;align-items:center;gap:12px}
+.sep{width:1px;height:18px;background:rgba(255,255,255,.5)}
+.top-hint{top:16px;left:50%;transform:translateX(-50%);padding:9px 18px;font-size:13px;white-space:nowrap}
+.top-right{top:16px;right:16px;padding:6px;display:flex;gap:4px}
+.top-right button,.bottom-bar button{background:none;border:0;color:#fff;font:inherit;cursor:pointer}
+.top-right button{padding:6px 12px;border-radius:999px;font-size:14px}
+.top-right button:hover{background:rgba(255,255,255,.15)}
+.bottom-bar{bottom:20px;left:50%;transform:translateX(-50%);border-radius:24px;display:flex;padding:8px}
+.bottom-bar button{width:96px;padding:8px 0;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:14px;border-radius:16px}
+.bottom-bar button+button{border-left:1px solid rgba(255,255,255,.2);border-radius:0}
+.bottom-bar button span{font-size:26px}
+.bottom-bar button:active{transform:scale(.94)}
+.bubble{position:fixed;z-index:6;background:rgba(255,250,240,.95);color:#4a3a2a;padding:6px 14px;border-radius:16px;font-size:15px;font-weight:600;transform:translate(-50%,-100%);pointer-events:none;transition:opacity .25s;white-space:nowrap}
+.bubble:after{content:"";position:absolute;left:50%;bottom:-7px;margin-left:-7px;border:7px solid transparent;border-bottom:0;border-top-color:rgba(255,250,240,.95)}
+.hidden{opacity:0}
+.note{position:fixed;left:16px;bottom:12px;font-size:11px;opacity:.7;z-index:5;text-shadow:0 1px 3px #000}
+.logo{position:fixed;right:14px;bottom:14px;height:28px;z-index:5;opacity:.9}
+#flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:8;transition:opacity .4s}
+#loading{position:fixed;inset:0;background:#0b1530;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity .6s}
+#loading img{width:min(40vw,220px)}
+#loading .bar{width:180px;height:4px;background:rgba(255,255,255,.2);border-radius:4px;overflow:hidden}
+#loading .bar i{display:block;height:100%;width:0;background:#ffd38a;transition:width .3s}
+#loading p{font-size:14px;opacity:.8}
+@media (max-width:640px){.top-hint{display:none}.bottom-bar button{width:72px;font-size:12px}.top-left{font-size:14px;padding:8px 14px}.logo{height:20px;bottom:90px}}
+
+.round{width:30px;height:30px;border-radius:50%;border:0;background:rgba(255,255,255,.2);color:#fff;cursor:pointer;font-size:14px}
+.sub-hint{top:62px;left:50%;transform:translateX(-50%);padding:5px 14px;font-size:11px;white-space:nowrap;opacity:.85}
+.toast{top:110px;left:50%;transform:translateX(-50%);padding:8px 16px;font-size:13px;transition:opacity .3s}
+@media (max-width:640px){.sub-hint{top:auto;bottom:100px;font-size:10px}}

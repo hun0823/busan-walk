@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>부산 산책 | 북항 친수공원</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:,">
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+</head><body>
+<div id="loading"><img src="assets/210lab-logo-clean.png" alt="210LAB"><div class="bar"><i id="loadbar"></i></div><p>산책 준비 중…</p></div>
+<div id="app"></div>
+<div class="glass top-left"><button id="btnExit" class="round" title="나가기">✕</button>부산 산책 <span class="sep"></span> 북항 친수공원 01</div>
+<div class="glass top-hint">바닥 클릭 · 드래그로 둘러보기 · 휠로 확대/축소</div>
+<div class="glass top-right">
+  <button id="btnTime" title="시간대 전환">🌇 저녁</button>
+  <button title="인원(싱글 플레이)">👥 1</button>
+  <button id="btnSound" title="물소리(직접 합성)">🔇</button>
+  <button id="btnSet" title="설정">⚙️</button>
+</div>
+<div class="glass sub-hint">월드 배치는 실제 지도가 아닌 상상 구성(연출)입니다 · WASD/방향키 이동</div>
+<div id="toast" class="glass toast hidden"></div>
+<div id="bubble" class="bubble hidden">멍!</div>
+<div class="glass bottom-bar">
+  <button data-act="pet"><span>🐾</span>쓰다듬기</button>
+  <button data-act="treat"><span>🦴</span>간식</button>
+  <button data-act="sit"><span>🐕</span>앉아</button>
+  <button data-act="photo"><span>📷</span>사진</button>
+</div>
+<div id="flash"></div>
+<div class="note">※ 일부 풍경은 연출입니다</div>
+<img class="logo" src="assets/210lab-logo-clean.png" alt="210LAB">
+<script type="module" src="js/main.js"></script>
+</body></html>
