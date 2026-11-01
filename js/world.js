@@ -1,11 +1,11 @@
 // 북항 친수공원 월드 — OpenStreetMap 실측 데이터 기반 (data/bukhang.json, tools/build_world.py 로 생성)
 // Map data © OpenStreetMap contributors (ODbL 1.0)
 // 좌표: 공원 중심(35.108897N, 129.044595E) 기준 로컬 미터(+x 동, +y 북) → 월드 X = x*S, Z = -y*S (북쪽 = -Z)
-// 스케일 S = 0.4 : 실제 약 1,300m × 640m 공원을 약 520 × 256 월드 단위로 줄임(캐릭터는 실물 크기 유지). 상대 배치·모양은 데이터 그대로.
+// 스케일 S = 0.3 : 실제 약 1,300m × 640m 공원을 약 390 × 192 월드 단위로 줄임(캐릭터는 실물 크기 유지). 상대 배치·모양은 데이터 그대로.
 // 데이터: 공원 경계·경관수로·보행로·잔디·다리 윤곽·도로·건물 윤곽·해안선(육지 판정)·일부 나무 점.
 // 연출(데이터에 없음): 건물 높이·색, 다리 높이·난간 디테일, 나무 대부분, 가로등, 팜파스, 먼 대교·섬 실루엣, 수로, 물고기·상어·항만 크레인·정박선 경관조명, 지형 평탄.
 import * as THREE from 'three';
-export const S = 0.4;
+export const S = 0.3;
 const DATA = await (await fetch('data/bukhang.json')).json();
 const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: .85, metalness: 0, ...o });
 const V2 = ([x, y]) => new THREE.Vector2(x * S, y * S);
@@ -70,10 +70,11 @@ function label(text, sub) {
 }
 
 // 시작 위치: 남서 입구(다리 ① 부근, 실측 약 (-215,-345)m) 가장 가까운 보행로 위 점
+let START_ROT = 1.3;
 function findStart() {
   const tx = -215 * S, tz = 345 * S; let best = null;
   for (const { p } of DATA.paths) for (const q of p) { const [x, z] = W(q); const d = Math.hypot(x - tx, z - tz); if (isWalkable(x, z) && !onBridge(x, z) && (!best || d < best.d)) best = { x, z, d }; }
-  return { x: best.x, z: best.z, rot: Math.atan2(1, -1) }; // 북동쪽(수로 상류 방향)을 바라봄
+  return { x: best.x, z: best.z, rot: START_ROT }; // 북항대교가 화면 한쪽에 보이는 방향
 }
 
 export const __test = { onBridge: (x, z) => onBridge(x, z) };
@@ -182,11 +183,8 @@ export function buildWorld(scene) {
   const bMesh = new THREE.Mesh(bG, bridgeMat); bMesh.castShadow = bMesh.receiveShadow = true; scene.add(bMesh); walkMeshes.push(bMesh);
   const blG = ribbons(DATA.bridgeLines.map(b => ({ p: b.p, w: Math.max(1.6, b.w * S) })), BRIDGE_H + .02);
   const bl = new THREE.Mesh(blG, bridgeMat); bl.receiveShadow = true; scene.add(bl); walkMeshes.push(bl);
-  const railMat = M(0xcfc3b4), railGlow = new THREE.MeshStandardMaterial({ color: 0, emissive: 0xffd9a0 }); emissives.deco.push(railGlow);
-  const rails = []; for (const b of DATA.bridges) rails.push({ p: [...b.poly, b.poly[0]], w: .12 });
-  const railTop = new THREE.Mesh(ribbons(rails, BRIDGE_H + .9), railMat); scene.add(railTop);
-  scene.add(new THREE.Mesh(walls(DATA.bridges.map(b => b.poly), BRIDGE_H + .9, BRIDGE_H), new THREE.MeshStandardMaterial({ color: 0xcfe8f0, transparent: true, opacity: .35, side: THREE.DoubleSide, roughness: .1 })));
-  scene.add(new THREE.Mesh(ribbons(rails, BRIDGE_H + .02), railGlow));
+  const bpaveTex = canvasTex(128, 128, (c, w, h) => { c.fillStyle = '#d9cbb6'; c.fillRect(0, 0, w, h); for (let y = 0; y < 8; y++) for (let x = 0; x < 4; x++) { c.fillStyle = `hsl(${30 + rnd() * 10},${18 + rnd() * 10}%,${72 + rnd() * 10}%)`; c.fillRect(x * 32 + (y % 2) * 16 + 1, y * 16 + 1, 30, 14); } }, [1, 1]);
+  bridgeMat.map = bpaveTex; planarUV(bG, .45); planarUV(blG, .45);
 
   // 건물: 윤곽 OSM, 높이·색은 연출(높이 데이터 없음) — 높이 구간별 4개 메쉬로 병합
   const buckets = [[], [], [], []];
@@ -307,16 +305,24 @@ export function buildWorld(scene) {
   const lights = []; for (let i = 0; i < 4; i++) { const p = new THREE.PointLight(0xffb860, 1, 14, 1.6); scene.add(p); lights.push(p); }
 
   // 먼 풍경(연출): 부산항대교 방향(남동쪽 바다)과 영도 방향(남쪽) 실루엣 — 위치·형태 모두 연출
-  const far = new THREE.Group(); far.position.set(520, -0.9, 420); far.rotation.y = -0.5; scene.add(far);
+  // 부산항대교(북항대교): 실제로는 북항 입구(영도 방향)를 가로지르는 사장교. 방향은 대략 실제(남동쪽 바다, 영도↔동구 방향), 거리·크기·형태 치수는 모두 연출
+  const far = new THREE.Group(); far.position.set(470, -0.9, 400); far.rotation.y = .74; scene.add(far);
   const silM = M(0x9aa6b8, { roughness: 1, fog: false });
-  const deckB = new THREE.Mesh(new THREE.BoxGeometry(420, 3, 6), silM); deckB.position.set(0, 22, 0); far.add(deckB);
-  const cableMat = new THREE.LineBasicMaterial({ color: 0xc0c8d4 });
-  for (const tx of [-70, 70]) {
-    for (const s of [-2, 2]) { const tw = new THREE.Mesh(new THREE.BoxGeometry(4, 80, 4), silM); tw.position.set(tx + s, 40, 0); far.add(tw); }
-    for (let k = 1; k <= 8; k++) for (const d of [-1, 1]) far.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(tx, 76 - k * 2, 0), new THREE.Vector3(tx + d * k * 8, 23, 0)]), cableMat));
+  const deckB = new THREE.Mesh(new THREE.BoxGeometry(560, 3.2, 9), silM); deckB.position.set(0, 26, 0); far.add(deckB);
+  const deckL = new THREE.Mesh(new THREE.BoxGeometry(560, 1.2, 9.4), M(0x7d889a, { roughness: 1, fog: false })); deckL.position.set(0, 24, 0); far.add(deckL);
+  for (const ax of [-250, -200, 200, 250]) { const pier = new THREE.Mesh(new THREE.BoxGeometry(4, 25, 4), silM); pier.position.set(ax, 12.5, 0); far.add(pier); }
+  const cableMat = new THREE.LineBasicMaterial({ color: 0xc0c8d4, fog: false }), cablePts = [];
+  for (const tx of [-90, 90]) {
+    for (const s of [-1, 1]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(4, 110, 4), silM); leg.position.set(tx, 55, s * 9); leg.rotation.x = -s * .08; far.add(leg); } // 역Y형 주탑(형태 연출)
+    const top = new THREE.Mesh(new THREE.BoxGeometry(5, 26, 5), silM); top.position.set(tx, 118, 0); far.add(top);
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 22), silM); beam.position.set(tx, 30, 0); far.add(beam);
+    for (let k = 1; k <= 12; k++) for (const d of [-1, 1]) for (const s of [-1, 1]) cablePts.push(new THREE.Vector3(tx, 128 - k * 1.8, s * .5), new THREE.Vector3(tx + d * k * 6.8, 27.5, s * 4.3));
   }
-  const bLights = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 6, 4), new THREE.MeshStandardMaterial({ color: 0, emissive: 0xffd28a }), 60);
-  for (let i = 0; i < 60; i++) { mtx.makeTranslation(-205 + i * 7, 24, 3.2); bLights.setMatrixAt(i, mtx); } far.add(bLights); emissives.city.push(bLights.material);
+  far.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(cablePts), cableMat));
+  const bLights = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 6, 4), new THREE.MeshStandardMaterial({ color: 0, emissive: 0xffd28a, fog: false }), 140);
+  for (let i = 0; i < 140; i++) { mtx.makeTranslation(-278 + (i >> 1) * 8, 28.2, (i & 1) ? 4.6 : -4.6); bLights.setMatrixAt(i, mtx); } far.add(bLights); emissives.city.push(bLights.material);
+  const redM = new THREE.MeshStandardMaterial({ color: 0, emissive: 0xff3b2f, fog: false }); emissives.city.push(redM);
+  for (const tx of [-90, 90]) { const rl = new THREE.Mesh(new THREE.SphereGeometry(1.6, 8, 6), redM); rl.position.set(tx, 132, 0); far.add(rl); }
   const island = new THREE.Mesh(new THREE.SphereGeometry(80, 24, 12, 0, 6.28, 0, Math.PI / 2), M(0x5d7466, { roughness: 1, fog: false })); island.scale.set(2.2, .5, .8); island.position.set(80, -1, 650); scene.add(island);
 
   // ---- 시간대 반영 ----
@@ -331,7 +337,7 @@ export function buildWorld(scene) {
     emissives.city.forEach(m => m.emissiveIntensity = c.city);
     const night = c.sunVis < .5;
     bMats.forEach((m, k) => m.color.set(night ? [0x4a4f66, 0x40465e, 0x363d58, 0x2e3550][k] || 0x3a4058 : bcol[k] ?? bcol[3]));
-    silM.color.set(night ? 0x3a4560 : 0xb0b4c4); island.material.color.set(night ? 0x1c2a33 : 0x4d6656);
+    silM.color.set(night ? 0x46506c : 0xa9b0c2); cableMat.color.set(c.lamp > 1 ? 0xf2e6c8 : 0xc0c8d4); island.material.color.set(night ? 0x1c2a33 : 0x4d6656);
   }
   const _v = new THREE.Vector3();
   function update(t, dt, camera, gp) {
@@ -384,17 +390,44 @@ export function buildWorld(scene) {
     if (shark.userData.hold) { const h = shark.userData.hold; shark.position.x = h[0]; shark.position.z = h[1]; shark.rotation.y = h[2] + Math.sin(t * 2) * .06; } // 촬영용 고정(테스트 훅)
   }
   const canalGrid = new Map(); const inCanalFast = (x, z) => { const k = Math.round(x * 2) + ',' + Math.round(z * 2); let v = canalGrid.get(k); if (v === undefined) { v = inCanal(x, z); canalGrid.set(k, v); } return v; };
+
+  // ===== 다리 디테일(연출): 윤곽은 OSM, 난간·연석·조명·아치는 연출. 수로에 면한 가장자리에만 난간(진입부는 열어 둠) =====
+  { const postP = [], railRuns = [], lampP = [], arches = [];
+    const inPoly = (r, x, z) => inRing(r, x, z);
+    for (const b of DATA.bridges) { const r = b.poly.map(W); let run = null; const runs = [];
+      for (let i = 0; i < r.length; i++) { const a = r[i], c = r[(i + 1) % r.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]); if (L < .01) continue; const tx = (c[0] - a[0]) / L, tz = (c[1] - a[1]) / L, nx = -tz, nz = tx;
+        for (let d = 0; d <= L; d += .6) { const x = a[0] + tx * d, z = a[1] + tz * d; const s1 = inPoly(r, x + nx * .5, z + nz * .5); const ox = s1 ? -nx : nx, oz = s1 ? -nz : nz;
+          const water = inCanalFast(x + ox * 1.0, z + oz * 1.0) && inCanalFast(x + ox * 2.2, z + oz * 2.2);
+          const px = x - ox * .18, pz = z - oz * .18;
+          if (water) { if (!run) { run = []; runs.push(run); } run.push([px, pz]); } else run = null; } }
+      for (const rn of runs) { if (rn.length < 3) continue; railRuns.push(rn); rn.forEach((q, k) => { if (k % 2 === 0) postP.push(q); if (k % 10 === 5) lampP.push(q); }); }
+      const longR = runs.filter(rn => rn.length >= 6).sort((a, c) => c.length - a.length).slice(0, 2); const xs = r.map(q => q[0]), zs = r.map(q => q[1]);
+      const minW = Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs)); if (longR.length && minW < 14) arches.push(...longR); }
+    const postG = new THREE.CylinderGeometry(.05, .06, .9, 6); postG.translate(0, BRIDGE_H + .45, 0);
+    const posts = new THREE.InstancedMesh(postG, M(0x8a8f96, { roughness: .4, metalness: .5 }), postP.length);
+    postP.forEach(([x, z], i) => { mtx.makeTranslation(x, 0, z); posts.setMatrixAt(i, mtx); }); scene.add(posts);
+    const tubes = (runs, y, rad, mat) => runs.forEach(rn => { if (rn.length < 2) return; const curve = new THREE.CatmullRomCurve3(rn.map(([x, z]) => new THREE.Vector3(x, typeof y === 'function' ? y(x, z) : y, z))); scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(4, rn.length * 2), rad, 6, false), mat)); });
+    const handM = M(0xb07a4a, { roughness: .6 }); tubes(railRuns, BRIDGE_H + .92, .055, handM); // 나무 손잡이
+    tubes(railRuns, BRIDGE_H + .45, .025, M(0x9aa0a8, { metalness: .5, roughness: .4 })); // 중간 가로대
+    scene.add(new THREE.Mesh(ribbons(railRuns.map(rn => ({ p: rn.map(([x, z]) => [x / S, -z / S]), w: .28 })), BRIDGE_H + .1), M(0xbdb3a4, { roughness: .9 }))); // 연석
+    const lampM = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xffd89a }); emissives.lamp.push(lampM);
+    const bl2 = new THREE.InstancedMesh(new THREE.SphereGeometry(.09, 8, 6), lampM, lampP.length); lampP.forEach(([x, z], i) => { mtx.makeTranslation(x, BRIDGE_H + 1.0, z); bl2.setMatrixAt(i, mtx); }); scene.add(bl2);
+    const archM = M(0xe9e4dc, { roughness: .5 });
+    arches.forEach(rn => { const n = rn.length - 1; const pts = rn.map(([x, z], k) => new THREE.Vector3(x, -.55 + (BRIDGE_H - .05 + .55) * Math.sin(Math.PI * k / n), z)); scene.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), n * 2, .09, 8, false), archM));
+      for (let k = 2; k < n - 1; k += 2) { const p = pts[k]; const h = BRIDGE_H - .25 - p.y; if (h < .08) continue; const sp = new THREE.Mesh(new THREE.CylinderGeometry(.03, .03, h, 5), archM); sp.position.set(p.x, p.y + h / 2, p.z); scene.add(sp); } }); }
   // 항만(연출): OSM 해안선 근처의 바다쪽 긴 안벽에 크레인·정박선 배치
   const harbor = new THREE.Group(); scene.add(harbor); { const quays = [];
     const pc = [(B.x0 + B.x1) / 2, (B.z0 + B.z1) / 2];
-    for (const r of DATA.outerGround.map(p => p[0].map(W))) for (let i = 0; i < r.length; i++) { const a = r[i], b = r[(i + 1) % r.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 28) continue; const tx = (b[0] - a[0]) / L, tz = (b[1] - a[1]) / L; const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
-      for (const sg of [1, -1]) { const nx = -tz * sg, nz = tx * sg; if (isSea(mx + nx * 8, mz + nz * 8) && isSea(mx + nx * 20, mz + nz * 20) && !isSea(mx - nx * 4, mz - nz * 4) && Math.hypot(mx - pc[0], mz - pc[1]) > 70) quays.push({ mx, mz, tx, tz, nx, nz, L }); } }
+    const OG = DATA.outerGround.flatMap(p => p[0].map(W)), gx0 = Math.min(...OG.map(p => p[0])), gx1 = Math.max(...OG.map(p => p[0])), gz0 = Math.min(...OG.map(p => p[1])), gz1 = Math.max(...OG.map(p => p[1]));
+    const nearCut = (x, z) => x - gx0 < 12 || gx1 - x < 12 || z - gz0 < 12 || gz1 - z < 12; // 지도 잘린 가장자리(OSM 범위 경계)는 실제 안벽 아님
+    for (const r of DATA.outerGround.map(p => p[0].map(W))) for (let i = 0; i < r.length; i++) { const a = r[i], b = r[(i + 1) % r.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 22 || nearCut(a[0], a[1]) || nearCut(b[0], b[1])) continue; const tx = (b[0] - a[0]) / L, tz = (b[1] - a[1]) / L; const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
+      for (const sg of [1, -1]) { const nx = -tz * sg, nz = tx * sg; if (isSea(mx + nx * 8, mz + nz * 8) && isSea(mx + nx * 20, mz + nz * 20) && !isSea(mx - nx * 4, mz - nz * 4) && Math.hypot(mx - pc[0], mz - pc[1]) > 52) quays.push({ mx, mz, tx, tz, nx, nz, L }); } }
     quays.sort((a, b) => b.L - a.L); const used = [];
     const red = M(0xd8483a, { roughness: .7 }), wht = M(0xeeeeea, { roughness: .7 }), dark = M(0x3a4048, { roughness: .8 }), cont = [0x3a78c8, 0xd86a3a, 0x4aa86a, 0xe8c04a, 0xb84a5a].map(c => M(c, { roughness: .8 }));
     const box = (w, h, d, m, x, y, z, g) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); g.add(o); return o; };
     let nc = 0, ns = 0;
-    for (const q of quays) { if (used.some(u => Math.hypot(u[0] - q.mx, u[1] - q.mz) < 45)) continue; used.push([q.mx, q.mz]);
-      const g = new THREE.Group(); g.position.set(q.mx, 0, q.mz); g.rotation.y = Math.atan2(q.nx, q.nz); harbor.add(g); // 로컬 +Z = 바다 쪽
+    for (const q of quays) { if (used.some(u => Math.hypot(u[0] - q.mx, u[1] - q.mz) < 34)) continue; used.push([q.mx, q.mz]);
+      const g = new THREE.Group(); g.position.set(q.mx, 0, q.mz); g.rotation.y = Math.atan2(q.nx, q.nz); g.scale.setScalar(.8); harbor.add(g); // 로컬 +Z = 바다 쪽
       for (const off of nc < 5 ? [-7, 7] : []) { const c = new THREE.Group(); c.position.x = off; g.add(c); for (const lx of [-2.2, 2.2]) for (const lz of [-3, 3]) box(.6, 12, .6, (lz > 0) ? red : wht, lx, 6, lz - 2, c); box(5.4, 1.4, 1, red, 0, 12.4, 1.5, c); box(1.2, 1.2, 22, red, 0, 13.6, 5, c); box(1.6, 1.4, 1.8, wht, 0, 12.2, 9, c); box(.4, 6, .1, dark, 0, 9.6, 12, c); nc++; }
       if (ns < 4) { const sh = new THREE.Group(); sh.position.set(0, -.6, 6.5); sh.rotation.y = Math.PI / 2; g.add(sh); const len = 26; box(len, 2.4, 6, dark, 0, 0, 0, sh); box(len - 1, .5, 6.1, red, 0, -.9, 0, sh); const bow = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 2.4, 3, 1), dark); bow.rotation.y = Math.PI / 6; bow.scale.set(.9, 1, 1); bow.position.set(len / 2, 0, 0); sh.add(bow);
         box(4, 4, 5, wht, -len / 2 + 3, 3.2, 0, sh); box(1.2, 2.5, 1.2, red, -len / 2 + 2, 6, 0, sh); for (let k = 0; k < 6; k++) for (let h = 0; h < 2; h++) if (rnd() > .25) box(2.6, 1.2, 4.6, cont[Math.floor(rnd() * 5)], -len / 2 + 7.5 + k * 2.8, 1.8 + h * 1.25, 0, sh); ns++; }

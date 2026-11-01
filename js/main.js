@@ -87,7 +87,7 @@ let yaw = world.start.rot - Math.PI + +(_q.get('yaw') || 0), pitch = 0.3, dist =
 const camTarget = new THREE.Vector3().copy(start);
 const TOP = _q.get('view') === 'top'; if (TOP) document.body.classList.add('topview'); // 디버그: 위에서 본 지도 컷(북쪽이 화면 위)
 function updateCamera(dt) {
-  if (TOP) { world.topPreview(); hemi.color.set(0xffffff); hemi.groundColor.set(0x8a9a70); hemi.intensity = 2.2; sun.color.set(0xffffff); sun.intensity = 2.2; renderer.toneMappingExposure = 1.05; const cx = 100 * MAP_SCALE, cz = -90 * MAP_SCALE; camera.up.set(0, 0, -1); camera.position.set(cx, 720, cz + 0.01); camera.lookAt(cx, 0, cz); scene.fog.near = 1e5; scene.fog.far = 1e6; return; }
+  if (TOP) { world.topPreview(); hemi.color.set(0xffffff); hemi.groundColor.set(0x8a9a70); hemi.intensity = 2.2; sun.color.set(0xffffff); sun.intensity = 2.2; renderer.toneMappingExposure = 1.05; const cx = 100 * MAP_SCALE, cz = -90 * MAP_SCALE; camera.up.set(0, 0, -1); camera.position.set(cx, 560, cz + 0.01); camera.lookAt(cx, 0, cz); scene.fog.near = 1e5; scene.fog.far = 1e6; return; }
   camTarget.lerp(guardian.root.position, 1 - Math.exp(-dt * 6));
   const t = camTarget.clone(); t.y += 0.6;
   camera.position.set(
@@ -207,12 +207,12 @@ function frame() {
     moveTarget = null; marker.visible = false;
     const f = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)), r = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
     const dir = r.multiplyScalar(kx).add(f.multiplyScalar(-kz)).normalize();
-    walking = moveChar(g, dir, 4.5, dt); // 축척 0.4 월드에 맞춰 속도 상향
+    walking = moveChar(g, dir, 4.0, dt); // 축척 0.3 월드에 맞춘 속도
   } else if (moveTarget) {
     tmp.subVectors(moveTarget, g.position); tmp.y = 0;
     const d = tmp.length();
     if (d < 0.15) { moveTarget = null; marker.visible = false; }
-    else { walking = moveChar(g, tmp.normalize(), 4.5, dt); if (!walking) { moveTarget = null; marker.visible = false; } }
+    else { walking = moveChar(g, tmp.normalize(), 4.0, dt); if (!walking) { moveTarget = null; marker.visible = false; } }
   }
   guardian.animate(time, walking);
   marker.rotation.z += dt;
