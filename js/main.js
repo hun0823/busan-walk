@@ -4,8 +4,11 @@
 import * as THREE from 'three';
 import { buildWorld, isWalkable, heightAt, S as MAP_SCALE } from './world.js';
 import { makeGuardian, makeDog } from './characters.js';
-import { TIMES, applyTime } from './times.js';
-import { WaterSound } from './sound.js';
+import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js';
+import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js';
+import { NetState, initNetStatus } from './net.js';
+import { makeMat } from './mat.js';
+import { BgSound } from './sound.js';
 
 const $ = s => document.querySelector(s);
 const setLoad = p => { $('#loadbar').style.width = p + '%'; };
@@ -33,10 +36,16 @@ scene.add(hemi, sun, sun.target);
 
 setLoad(30);
 const world = buildWorld(scene);
+const sound = new BgSound(); // 배경음(직접 합성) — 첫 터치/클릭 후 시작, 음소거는 localStorage bw.mute
+let nearAcc = 0;
 setLoad(70);
 
 const guardian = makeGuardian(); scene.add(guardian.root);
-const dog = makeDog(); scene.add(dog.root);
+// 강아지 이름·견종: localStorage 저장
+const LS = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+let dogName = LS.get('bw.dogName') || '바다', breedId = LS.get('bw.breed') || DEFAULT_BREED;
+let dog = makeDog(breedById(breedId)); scene.add(dog.root);
+function swapDog(id) { const old = dog; dog = makeDog(breedById(id)); dog.root.position.copy(old.root.position); dog.root.rotation.y = old.root.rotation.y; scene.remove(old.root); scene.add(dog.root); breedId = id; }
 // 캐릭터 보조 라이트(약하게, 밤에도 칙칙하지 않게)
 const charFill = new THREE.PointLight(0xffe2c0, 1.2, 6, 1.5); scene.add(charFill);
 const start = new THREE.Vector3(world.start.x, 0, world.start.z); // 남서 입구 근처 보행로(OSM)
@@ -61,24 +70,26 @@ function updateLeash() {
   scene.add(leashMesh);
 }
 
-// ---------- 시간대 ----------
-const order = ['dusk', 'night', 'dawn'];
-let timeIdx = 0;
-let cur = JSON.parse(JSON.stringify(TIMES.dusk)), target = TIMES.dusk, blendT = 1, from = cur;
+// ---------- 시간대: 현실시간 20분마다 아침→점심→저녁 (Date.now() 기반, 모든 접속자 동일) ----------
+const _q0 = new URLSearchParams(location.search);
+const clock = { offset: +(_q0.get('tshift') || 0), override: null, paused: false, pausedAt: 0 }; // tshift: 디버그용 ms 이동
+const nowMs = () => clock.paused ? clock.pausedAt : Date.now() + clock.offset;
+function curPhase() { if (clock.override) return { phase: clock.override, p: clock.override === 'evening' ? .95 : .5 }; return phaseAt(nowMs()); }
+let ph = curPhase(), cur = presetFor(ph.phase, ph.p, THREE.Color), from = cur, blendT = 1, lastPhase = ph.phase, applyAcc = 0;
+const BLEND_S = 6; // 위상 전환 블렌딩(초)
 applyTime(cur, { scene, hemi, sun, renderer, world });
-function setTime(key, instant) {
-  from = JSON.parse(JSON.stringify(cur)); target = TIMES[key]; blendT = instant ? 0.999 : 0;
-  $('#btnTime').textContent = TIMES[key].label;
+function tickTime(dt) {
+  ph = curPhase();
+  if (ph.phase !== lastPhase) { from = cur; blendT = 0; lastPhase = ph.phase; }
+  const want = presetFor(ph.phase, ph.p, THREE.Color);
+  applyAcc += dt;
+  if (blendT < 1) { blendT = Math.min(1, blendT + dt / BLEND_S); const k = blendT * blendT * (3 - 2 * blendT); cur = lerpPreset(from, want, k, THREE.Color); applyTime(cur, { scene, hemi, sun, renderer, world }); }
+  else if (applyAcc > .5) { applyAcc = 0; cur = want; applyTime(cur, { scene, hemi, sun, renderer, world }); } // 저녁 안에서 서서히 밤으로
+  sound.setPhase(ph.phase); nearAcc += dt; if (nearAcc > .5) { nearAcc = 0; const p = guardian.root.position; sound.setNear(world.waterNear(p.x, p.z)); }
+  const lbl = PHASE_LABEL[ph.phase]; if ($('#timeLbl').textContent !== lbl) $('#timeLbl').textContent = lbl;
 }
-$('#btnTime').onclick = () => { timeIdx = (timeIdx + 1) % 3; setTime(order[timeIdx]); };
-function lerpTime(a, b, t) {
-  const o = {};
-  for (const k in b) {
-    if (typeof b[k] === 'number') o[k] = a[k] + (b[k] - a[k]) * t;
-    else if (typeof b[k] === 'string' && b[k][0] === '#') o[k] = '#' + new THREE.Color(a[k]).lerp(new THREE.Color(b[k]), t).getHexString();
-    else o[k] = b[k];
-  }
-  return o;
+function setTime(key, instant) { // 관리자/테스트: 'morning'|'noon'|'evening'|null(자동)
+  clock.override = key; from = cur; blendT = instant ? .999 : 0; lastPhase = curPhase().phase;
 }
 
 // ---------- 카메라 ----------
@@ -163,6 +174,7 @@ document.querySelectorAll('.bottom-bar button').forEach(b => b.onclick = () => {
   if (a === 'treat') { dogAction = 'treat'; actionT = 1.6; say('냠냠! 맛있다멍'); spawnHearts('✨', 0xffffff); }
   if (a === 'sit') { dogAction = 'sit'; actionT = 3; say('앉았어요!'); }
   if (a === 'photo') takePhoto();
+  if (a === 'rest') rest.on ? stopRest() : startRest();
 });
 function takePhoto() {
   renderer.render(scene, camera);
@@ -172,9 +184,77 @@ function takePhoto() {
   requestAnimationFrame(() => { $('#flash').style.transition = 'opacity .5s'; $('#flash').style.opacity = 0; });
   say('찰칵! 예쁘게 나왔나요?');
 }
-const sound = new WaterSound();
-$('#btnSound').onclick = () => { const on = sound.toggle(); $('#btnSound').textContent = on ? '🔊' : '🔇'; toast(on ? '잔잔한 물소리(직접 합성) 켜짐' : '소리 끔'); };
-$('#btnSet').onclick = () => toast('설정은 준비 중이에요');
+sound.muted = LS.get('bw.mute') === '1'; $('#btnSound').textContent = sound.muted ? '🔇' : '🔊';
+addEventListener('pointerdown', () => sound.start(), { once: true, capture: true }); addEventListener('keydown', () => sound.start(), { once: true });
+$('#btnSound').onclick = () => { const m = !sound.muted; sound.setMuted(m); LS.set('bw.mute', m ? '1' : '0'); $('#btnSound').textContent = m ? '🔇' : '🔊'; toast(m ? '소리 끔' : '배경음·물소리(직접 합성) 켜짐'); };
+// ---------- 휴식하기: 캐릭터 앞 평지에 돗자리(직접 제작)를 펴고 함께 앉음 ----------
+const mat = makeMat(); mat.visible = false; scene.add(mat);
+const rest = { on: false, t: 0, rot: 0, dogSpot: new THREE.Vector3(), folding: 0 };
+function matFits(x, z, r) { // 돗자리(1.8×1.3) 네 모서리+가장자리 중점이 모두 걷기 가능 영역
+  const c = Math.cos(r), s2 = Math.sin(r);
+  for (const [u, v] of [[-.95, -.7], [.95, -.7], [-.95, .7], [.95, .7], [0, -.7], [0, .7], [-.95, 0], [.95, 0], [0, 0]]) { const px = x + u * c + v * s2, pz = z - u * s2 + v * c; if (!isWalkable(px, pz)) return false; }
+  return true;
+}
+function startRest() {
+  const g = guardian.root; let spot = null;
+  for (const d of [1.3, 1.7, 2.2, 0.9, 2.8]) { for (const da of [0, .35, -.35, .7, -.7, 1.2, -1.2]) { const r = g.rotation.y + da, x = g.position.x + Math.sin(r) * d, z = g.position.z + Math.cos(r) * d; if (matFits(x, z, r)) { spot = { x, z, r }; break; } } if (spot) break; }
+  if (!spot) { toast('여기는 돗자리를 펼 평평한 자리가 없어요'); return; }
+  rest.on = true; rest.t = 0; rest.rot = spot.r; mat.visible = true; mat.position.set(spot.x, heightAt(spot.x, spot.z) + .01, spot.z); mat.rotation.y = spot.r;
+  const sx = Math.cos(spot.r), sz = -Math.sin(spot.r);
+  g.position.set(spot.x + sx * .35, heightAt(spot.x, spot.z) + .03, spot.z + sz * .35); g.rotation.y = spot.r;
+  rest.dogSpot.set(spot.x - sx * .4, heightAt(spot.x, spot.z) + .03, spot.z - sz * .4);
+  moveTarget = null; marker.visible = false; say(`${dogName}랑 잠깐 쉬어요`, 2.5);
+}
+function stopRest() { if (!rest.on) return; rest.on = false; rest.folding = 1; }
+function updateRest(dt) {
+  if (rest.on) { rest.t = Math.min(1, rest.t + dt / .5); mat.scale.set(rest.t, 1, .3 + .7 * rest.t); }
+  else if (rest.folding > 0) { rest.folding = Math.max(0, rest.folding - dt / .4); mat.scale.set(rest.folding, 1, .3 + .7 * rest.folding); if (!rest.folding) mat.visible = false; }
+}
+
+// ---------- 설정 · 정보 · 강아지 모달 ----------
+function openPanel(id) { document.querySelectorAll('.panel').forEach(p => p.classList.toggle('open', p.id === id)); }
+document.querySelectorAll('.panel [data-close]').forEach(b => b.onclick = () => openPanel(null));
+$('#btnSet').onclick = () => openPanel($('#setPanel').classList.contains('open') ? null : 'setPanel');
+$('#btnInfo').onclick = () => openPanel('infoPanel');
+$('#btnDog').onclick = () => openDogModal();
+let pickBreed = breedId;
+function openDogModal() {
+  pickBreed = breedId; $('#dogName').value = dogName;
+  const list = $('#breedList'); list.innerHTML = '';
+  for (const b of BREEDS) {
+    const el = document.createElement('button'); el.className = 'breed' + (b.id === pickBreed ? ' on' : ''); el.dataset.id = b.id;
+    el.innerHTML = `<i style="background:linear-gradient(135deg,${b.color} 55%,${b.color2} 55%)"></i><b>${b.name}</b><small>${{ drop: '처진 귀', erect: '쫑긋 귀', big: '큰 귀', semi: '반 선 귀', button: '단추 귀', bat: '박쥐 귀' }[b.ear]} · ${(b.size||1) >= 1.1 ? '큰 개' : (b.size||1) <= .9 ? '작은 개' : '중간'}</small>`;
+    el.onclick = () => { pickBreed = b.id; list.querySelectorAll('.breed').forEach(x => x.classList.toggle('on', x === el)); swapDog(b.id); };
+    list.appendChild(el);
+  }
+  openPanel('dogModal');
+}
+$('#dogOk').onclick = () => {
+  dogName = ($('#dogName').value.trim() || '바다').slice(0, 8); LS.set('bw.dogName', dogName); LS.set('bw.breed', pickBreed); if (pickBreed !== breedId) swapDog(pickBreed);
+  openPanel(null); say(`나 · ${dogName}`, 3);
+};
+
+// ---------- 서버 상태(현재 서버 없음: 오프라인 혼자 플레이로 정직하게 표시) ----------
+const net = initNetStatus($('#srv'));
+net.set(NetState.OFFLINE_SOLO);
+
+// ---------- 관리자 모드(숨김) ----------
+// 주의: 클라이언트 코드라 진짜 보안이 아님. 누구나 소스를 보면 켤 수 있음. 시간 표시를 바꾸는 것도 그 사용자 화면에만 적용됨.
+const ADMIN_CODE = '2100';
+let admin = _q0.get('admin') === '1', titleTaps = 0, titleT = 0;
+$('#title').addEventListener('click', () => { const n = performance.now(); titleTaps = n - titleT < 900 ? titleTaps + 1 : 1; titleT = n; if (titleTaps >= 5) { titleTaps = 0; const c = prompt('관리자 코드'); if (c === ADMIN_CODE) { admin = true; showAdmin(); } } });
+function showAdmin() { $('#adminPanel').classList.add('open'); }
+if (admin) showAdmin();
+document.querySelectorAll('#adminPanel [data-ph]').forEach(b => b.onclick = () => setTime(b.dataset.ph === 'auto' ? null : b.dataset.ph));
+$('#admPause').onclick = () => { if (clock.paused) { clock.offset = clock.pausedAt - Date.now(); clock.paused = false; } else { clock.pausedAt = nowMs(); clock.paused = true; } };
+$('#admClose').onclick = () => $('#adminPanel').classList.remove('open');
+let admAcc = 0;
+function updateAdmin() {
+  if (!$('#adminPanel').classList.contains('open') || (admAcc = (admAcc + 1) % 15)) return;
+  const p = phaseAt(nowMs()), left = Math.ceil((1 - p.p) * 20);
+  $('#admState').textContent = `현재: ${PHASE_LABEL[ph.phase]}${clock.override ? ' (고정)' : ''} · 자동 위상 ${PHASE_LABEL[p.phase]} ${Math.round(p.p * 100)}% · 다음까지 약 ${left}분 · ${clock.paused ? '일시정지' : '순환 중'}`;
+  $('#admPause').textContent = clock.paused ? '자동 순환 재개' : '자동 순환 일시정지';
+}
 $('#btnExit').onclick = () => toast('프로토타입이라 나가기는 아직 없어요');
 
 // ---------- 루프 ----------
@@ -198,11 +278,13 @@ function frame() {
   const t0 = performance.now();
   const now = performance.now(), dt = Math.min((now - lastT) / 1000, 0.05); lastT = now; time += dt;
   // 시간대 보간
-  if (blendT < 1) { blendT = Math.min(1, blendT + dt / 2.5); cur = lerpTime(from, target, blendT); applyTime(cur, { scene, hemi, sun, renderer, world }); }
+  tickTime(dt); updateAdmin();
   // 보호자 이동
   const kx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
   const kz = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
   let walking = false; const g = guardian.root;
+  if (rest.on && (kx || kz || moveTarget)) stopRest();
+  updateRest(dt);
   if (kx || kz) {
     moveTarget = null; marker.visible = false;
     const f = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)), r = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
@@ -214,7 +296,7 @@ function frame() {
     if (d < 0.15) { moveTarget = null; marker.visible = false; }
     else { walking = moveChar(g, tmp.normalize(), 4.0, dt); if (!walking) { moveTarget = null; marker.visible = false; } }
   }
-  guardian.animate(time, walking);
+  guardian.animate(time, walking, rest.on);
   marker.rotation.z += dt;
   // 강아지: 목줄 길이 안에서 보호자 옆을 따라감, 멀어지면 달려옴
   const dp = dog.root.position;
@@ -223,7 +305,8 @@ function frame() {
   tmp.subVectors(dogTarget, dp); tmp.y = 0;
   const dd = tmp.length(), gd = dp.distanceTo(g.position);
   let dogState = 'idle';
-  if (dogAction === 'sit') dogState = 'sit';
+  if (rest.on) { dogState = 'sit'; dp.lerp(rest.dogSpot, Math.min(1, dt * 4)); let dr = rest.rot - dog.root.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); dog.root.rotation.y += dr * Math.min(1, dt * 6); }
+  else if (dogAction === 'sit') dogState = 'sit';
   else if (dd > 0.35) {
     const run = gd > LEASH * 0.85;
     dogState = run ? 'run' : 'walk';
@@ -237,6 +320,7 @@ function frame() {
   if (actionT > 0) { actionT -= dt; if (actionT <= 0) dogAction = null; }
   if (dogState === 'sit' && walking) { dogAction = null; }
   dog.animate(time, dogState);
+  for (const d of breedsGrid) if (d.root.visible) d.animate(time, "idle");
   updateLeash();
   // 효과
   for (let i = hearts.length - 1; i >= 0; i--) {
@@ -264,8 +348,19 @@ function frame() {
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
 // 테스트/스크린샷용 훅
-window.__game = { setTime: k => { timeIdx = order.indexOf(k); setTime(k, true); }, say, test: { setPos: (x, z, r) => { guardian.root.position.set(x, 0, z); dog.root.position.set(x + .8, 0, z + .8); if (r !== undefined) yaw = r; }, setYaw: v => { yaw = v; }, setCam: (y, p, d) => { yaw = y; pitch = p; dist = d; }, getCam: () => [yaw, pitch, dist], dog: dog.root, guardian: guardian.root, moveChar, isWalkable, heightAt, world } }; // test: tools/walktest.mjs 용
+// 디버그: ?breeds=grid → 시작 위치 앞에 20종을 줄지어 세움(스크린샷용, 연출)
+const breedsGrid = [];
+if (new URLSearchParams(location.search).get('breeds') === 'grid') {
+  const p0 = guardian.root.position;
+  BREEDS.forEach((b, i) => { const d = makeDog(b); const c = i % 5, r = Math.floor(i / 5); d.root.position.set(p0.x + (c - 2) * 1.5, heightAt(p0.x, p0.z), p0.z - 3 - r * 1.7); d.root.rotation.y = 0; scene.add(d.root); breedsGrid.push(d); });
+}
+function lineup(n0 = 0, n = 20, cols = 5, gap = 1.3, fwd = 4) { // 카메라 앞에 견종을 격자로 배치
+  const f = new THREE.Vector3(); camera.getWorldDirection(f); f.y = 0; f.normalize(); const r = new THREE.Vector3(-f.z, 0, f.x);
+  const p0 = guardian.root.position; breedsGrid.forEach(d => d.root.visible = false);
+  breedsGrid.slice(n0, n0 + n).forEach((d, i) => { const c = i % cols, row = Math.floor(i / cols); const p = p0.clone().addScaledVector(f, fwd + row * 1.6).addScaledVector(r, (c - (cols - 1) / 2) * gap); d.root.position.set(p.x, heightAt(p.x, p.z), p.z); d.root.rotation.y = Math.atan2(-f.x, -f.z); d.root.visible = true; });
+}
+window.__game = { sound, breedsGrid, lineup, setTime: k => setTime(k, true), say, startRest, stopRest, openDogModal, swapDog, get rest() { return rest.on; }, test: { setPos: (x, z, r) => { guardian.root.position.set(x, 0, z); dog.root.position.set(x + .8, 0, z + .8); if (r !== undefined) yaw = r; }, setYaw: v => { yaw = v; }, setCam: (y, p, d) => { yaw = y; pitch = p; dist = d; }, getCam: () => [yaw, pitch, dist], get dog() { return dog.root; }, guardian: guardian.root, moveChar, isWalkable, heightAt, world } }; // test: tools/walktest.mjs 용
 
 setLoad(100);
 frame();
-setTimeout(() => { $('#loading').style.opacity = 0; setTimeout(() => $('#loading').remove(), 700); say('나 · 바다', 3); }, 400);
+setTimeout(() => { $('#loading').style.opacity = 0; setTimeout(() => $('#loading').remove(), 700); say(`나 · ${dogName}`, 3); if (!LS.get('bw.breed') && !_q0.has('nomodal')) openDogModal(); }, 400);

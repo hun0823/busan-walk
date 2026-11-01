@@ -15,6 +15,11 @@ const W = ([x, y]) => [x * S, -y * S]; // 월드 X,Z
 const parkPts = DATA.park[0][0].map(W);
 const B = { x0: Math.min(...parkPts.map(p => p[0])) - 6, x1: Math.max(...parkPts.map(p => p[0])) + 6, z0: Math.min(...parkPts.map(p => p[1])) - 6, z1: Math.max(...parkPts.map(p => p[1])) + 6 };
 const R = 2, GW = Math.ceil((B.x1 - B.x0) * R), GH = Math.ceil((B.z1 - B.z0) * R);
+// 시작 지점 앞 바다 시야를 가리던 OSM 건물 way 1431516584 '부산항 북항마리나'(building=yes, leisure=marina, 높이 데이터 없음).
+// 건물 덩어리 대신 낮은 반투명 유리 데크(연출)로 바꾸고 아래에 물·물고기를 둠. 윤곽만 OSM.
+const GLASS_IDX = DATA.buildings.findIndex(b => b.p.some(([x, y]) => Math.abs(x - .5) < .6 && Math.abs(y + 336.5) < .6));
+const GLASS_POLY = GLASS_IDX >= 0 ? DATA.buildings[GLASS_IDX].p : [];
+export const GLASS_LINK = [-29, 68.6, -24.6, 71.6]; // 공원 보행로 → 유리 데크 연결 경사로(월드 좌표, 연출: OSM상 1.8m 틈을 메움)
 const grid = (() => {
   const c = document.createElement('canvas'); c.width = GW; c.height = GH; const g = c.getContext('2d');
   const tp = p => { const [x, z] = W(p); return [(x - B.x0) * R, (z - B.z0) * R]; };
@@ -27,13 +32,18 @@ const grid = (() => {
   for (const b of DATA.bridgeLines) { g.lineWidth = (b.w * S + .8) * R; g.beginPath(); b.p.forEach((p, i) => { const [a, bb] = tp(p); i ? g.lineTo(a, bb) : g.moveTo(a, bb); }); g.stroke(); }
   // 바다·공원 밖은 막음: 공원 경계 밖 다리 픽셀 제거
   g.globalCompositeOperation = 'destination-in'; for (const p of DATA.park) fillRings(p, '#fff');
+  g.globalCompositeOperation = 'source-over'; fillRings([GLASS_POLY], '#f0f');
+  if (GLASS_POLY.length) { g.strokeStyle = '#f00'; g.lineWidth = 3 * R; g.lineCap = 'round'; g.beginPath(); g.moveTo((GLASS_LINK[0] - B.x0) * R, (GLASS_LINK[1] - B.z0) * R); g.lineTo((GLASS_LINK[2] - B.x0) * R, (GLASS_LINK[3] - B.z0) * R); g.stroke(); fillRings([GLASS_POLY], '#f0f'); } // 공원↔데크 연결 경사로(연출) // 유리 데크(북항마리나 자리, 연출): 걷기 가능(R) + 유리(B)
   return g.getImageData(0, 0, GW, GH).data;
 })();
 function cell(x, z) { const i = Math.floor((x - B.x0) * R), j = Math.floor((z - B.z0) * R); if (i < 0 || j < 0 || i >= GW || j >= GH) return -1; return (j * GW + i) * 4; }
 export function isWalkable(x, z) { const k = cell(x, z); return k >= 0 && grid[k] > 128 && grid[k + 3] > 128; }
 const onBridge = (x, z) => { const k = cell(x, z); return k >= 0 && grid[k + 1] > 128 && grid[k + 3] > 128; };
 export const BRIDGE_H = 0.3;
-export function heightAt(x, z) { return onBridge(x, z) ? BRIDGE_H : 0; }
+const onGlass = (x, z) => { const k = cell(x, z); return k >= 0 && grid[k + 2] > 128 && grid[k + 3] > 128 && grid[k + 1] < 128; };
+export const GLASS_H = 0.35;
+export function heightAt(x, z) { return onBridge(x, z) ? BRIDGE_H : onGlass(x, z) ? GLASS_H : 0; }
+export { onGlass };
 
 // ---- 기하 도우미 ----
 function shapes(polys) { return polys.map(([o, ...holes]) => { const s = new THREE.Shape(o.map(V2)); holes.forEach(h => s.holes.push(new THREE.Path(h.map(V2)))); return s; }); }
@@ -101,6 +111,18 @@ export function buildWorld(scene) {
   starG.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
   const stars = new THREE.Points(starG, new THREE.PointsMaterial({ color: 0xffffff, size: 1.5, sizeAttenuation: false, transparent: true, fog: false }));
   sky.add(stars);
+  // 별 2층(깜빡임 위상 다름) + 달(구체 + 캔버스 글로우) — 직접 제작
+  const starG2 = new THREE.BufferGeometry(), sp2 = [];
+  for (let i = 0; i < 350; i++) { const v = new THREE.Vector3().setFromSphericalCoords(845, Math.acos(rnd() * .92), rnd() * 6.28); sp2.push(v.x, v.y, v.z); }
+  starG2.setAttribute('position', new THREE.Float32BufferAttribute(sp2, 3));
+  const stars2 = new THREE.Points(starG2, new THREE.PointsMaterial({ color: 0xfff4dc, size: 2.2, sizeAttenuation: false, transparent: true, fog: false })); sky.add(stars2);
+  const moon = new THREE.Group(); moon.position.setFromSphericalCoords(780, 1.27, 1.6); sky.add(moon);
+  const moonM = new THREE.MeshBasicMaterial({ color: 0xf6f0d8, transparent: true, fog: false });
+  moon.add(new THREE.Mesh(new THREE.SphereGeometry(20, 24, 16), moonM));
+  const gc = document.createElement('canvas'); gc.width = gc.height = 128; { const g2 = gc.getContext('2d'), gr = g2.createRadialGradient(64, 64, 8, 64, 64, 64); gr.addColorStop(0, 'rgba(255,248,220,.9)'); gr.addColorStop(.35, 'rgba(255,240,200,.25)'); gr.addColorStop(1, 'rgba(255,240,200,0)'); g2.fillStyle = gr; g2.fillRect(0, 0, 128, 128); }
+  const glowM = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(gc), transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
+  const moonGlow = new THREE.Sprite(glowM); moonGlow.scale.setScalar(140); moon.add(moonGlow);
+  let starBase = 0;
 
   // 바다 (해안선 밖 = 육지 폴리곤 밖)
   const waterTex = canvasTex(256, 256, (c, w, h) => { c.fillStyle = '#ffffff'; c.fillRect(0, 0, w, h); for (let i = 0; i < 260; i++) { c.fillStyle = 'rgba(200,225,240,.5)'; c.beginPath(); c.ellipse(rnd() * w, rnd() * h, 6 + rnd() * 16, 1.5, 0, 0, 6.28); c.fill(); } }, [1, 1]);
@@ -188,7 +210,7 @@ export function buildWorld(scene) {
 
   // 건물: 윤곽 OSM, 높이·색은 연출(높이 데이터 없음) — 높이 구간별 4개 메쉬로 병합
   const buckets = [[], [], [], []];
-  for (const b of DATA.buildings) {
+  for (const [bi, b] of DATA.buildings.entries()) { if (bi === GLASS_IDX) continue;
     const xs = b.p.map(p => p[0]), ys = b.p.map(p => p[1]);
     const area = (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys));
     const k = area < 700 ? 0 : area < 3000 ? 1 : area < 12000 ? 2 : 3;
@@ -206,6 +228,35 @@ export function buildWorld(scene) {
   const winMat = new THREE.MeshStandardMaterial({ color: 0, emissive: 0xffd9a0 }); emissives.city.push(winMat);
   const winG = new THREE.ExtrudeGeometry(shapes([...buckets[2], ...buckets[3]]), { depth: .5, bevelEnabled: false }); winG.rotateX(-Math.PI / 2); winG.scale(1.002, 1, 1.002); winG.translate(0, bh[2] * .55, 0);
   scene.add(new THREE.Mesh(winG, winMat));
+
+  // 유리 데크(연출): OSM 북항마리나 윤곽 위에 낮은 반투명 유리 바닥 + 아래 물·물고기
+  const glassFish = { update() {} };
+  if (GLASS_POLY.length) {
+    const gpoly = [[GLASS_POLY]];
+    { const [ax, az, bx, bz] = GLASS_LINK, L = Math.hypot(bx - ax, bz - az) + 1.5; const rp = new THREE.Mesh(new THREE.BoxGeometry(3, .12, L), M(0xd9c7a8, { roughness: .8 })); rp.position.set((ax + bx) / 2, .17, (az + bz) / 2); rp.rotation.y = Math.atan2(bx - ax, bz - az); rp.receiveShadow = true; scene.add(rp); } // 연결 경사로(연출)
+    const wM = M(0x2f86a8, { roughness: .2, emissive: 0x0c3a50, emissiveIntensity: .6 });
+    const wMesh = new THREE.Mesh(flat(gpoly, .04), wM); scene.add(wMesh);
+    const capM = new THREE.MeshStandardMaterial({ color: 0xcff0f6, roughness: .05, metalness: .1, transparent: true, opacity: .22, depthWrite: false });
+    const rimM = M(0xc9c2b6, { roughness: .9 });
+    const gG = new THREE.ExtrudeGeometry(shapes(gpoly), { depth: GLASS_H, bevelEnabled: false }); gG.rotateX(-Math.PI / 2);
+    const gMesh = new THREE.Mesh(gG, [capM, rimM]); gMesh.renderOrder = 2; scene.add(gMesh);
+    // 유리 패널 이음새: 3 간격 격자를 폴리곤 안쪽만
+    const xs = GLASS_POLY.map(p => p[0] * S), zs = GLASS_POLY.map(p => -p[1] * S), pts = [];
+    const inside = (x, z) => { let c = false; for (let i = 0, j = xs.length - 1; i < xs.length; j = i++) if ((zs[i] > z) !== (zs[j] > z) && x < (xs[j] - xs[i]) * (z - zs[i]) / (zs[j] - zs[i]) + xs[i]) c = !c; return c; };
+    const [x0, x1, z0, z1] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)];
+    for (let x = x0; x < x1; x += 3) for (let z = z0; z < z1; z += .5) if (inside(x, z) && inside(x, z + .5)) pts.push(x, GLASS_H + .005, z, x, GLASS_H + .005, z + .5);
+    for (let z = z0; z < z1; z += 3) for (let x = x0; x < x1; x += .5) if (inside(x, z) && inside(x + .5, z)) pts.push(x, GLASS_H + .005, z, x + .5, GLASS_H + .005, z);
+    const seamG = new THREE.BufferGeometry(); seamG.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    scene.add(new THREE.LineSegments(seamG, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: .35 })));
+    // 물고기: 데크 아래(물 위 0.08~0.25)를 천천히 맴돔
+    const NF = 70, gf = [];
+    for (let i = 0; i < NF * 20 && gf.length < NF; i++) { const x = x0 + rnd() * (x1 - x0), z = z0 + rnd() * (z1 - z0); if (inside(x, z)) gf.push({ x, z, r: .6 + rnd() * 1.6, w: (.3 + rnd() * .5) * (rnd() < .5 ? -1 : 1), ph: rnd() * 6.28, y: .1 + rnd() * .14, s: .1 + rnd() * .08 }); }
+    const fb = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), M(0xffffff, { roughness: .5 }), gf.length);
+    const cols = [0xff9a3c, 0xffc06a, 0xf3e6c8, 0xe8705a, 0x8fd0e0];
+    gf.forEach((f, i) => fb.setColorAt(i, new THREE.Color(cols[i % cols.length]))); scene.add(fb);
+    const q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+    glassFish.update = t => { gf.forEach((f, i) => { const a = f.ph + t * f.w; ps.set(f.x + Math.cos(a) * f.r, f.y + Math.sin(t * 2 + f.ph) * .015, f.z + Math.sin(a) * f.r); q.setFromAxisAngle(up, -a + (f.w > 0 ? 0 : Math.PI)); sc.set(f.s * .55, f.s * .5, f.s * 1.4); mtx.compose(ps, q, sc); fb.setMatrixAt(i, mtx); }); fb.instanceMatrix.needsUpdate = true; };
+  }
 
   // 나무: OSM 나무 점 + 보행로를 따라 연출 배치
   const treePts = DATA.trees.map(W);
@@ -330,7 +381,8 @@ export function buildWorld(scene) {
   function setTime(c) {
     curT = c;
     skyU.top.value.set(c.skyTop); skyU.bot.value.set(c.skyBot); skyU.sunDir.value.set(c.sunX, c.sunY, c.sunZ); skyU.sunVis.value = c.sunVis;
-    stars.material.opacity = Math.max(0, 1 - c.sunVis) * (c.lamp > 2 ? 1 : .3); stars.visible = stars.material.opacity > .02;
+    starBase = c.starVis ?? Math.max(0, 1 - c.sunVis) * (c.lamp > 2 ? 1 : .3); stars.visible = stars2.visible = starBase > .02;
+    const mv = c.moon ?? 0; moon.visible = mv > .02; moonM.opacity = Math.min(1, mv * 1.2); glowM.opacity = mv * .8;
     waterMat.color.set(c.canal); { const cc = new THREE.Color(c.canal), hsl = {}; cc.getHSL(hsl); cc.setHSL(hsl.h, Math.max(hsl.s, .5), Math.max(hsl.l, .62)); waterMat.color.copy(cc); waterMat.emissive.copy(cc).multiplyScalar(.42); waterMat.emissiveIntensity = 1; } // 수로 전용 밝기 하한(시간대와 무관하게 밝은 청록 반투명) sea.material.color.set(c.sea); glintMat.color.set(c.glint); haloMat.opacity = Math.min(1, c.lamp * .45); poolMat.opacity = Math.min(.6, c.lamp * .22);
     emissives.lamp.forEach(m => m.emissiveIntensity = c.lamp);
     emissives.deco.forEach(m => m.emissiveIntensity = Math.max(0, c.lamp - .6) * .8);
@@ -341,9 +393,10 @@ export function buildWorld(scene) {
   }
   const _v = new THREE.Vector3();
   function update(t, dt, camera, gp) {
-    updateFish(t, dt, gp);
+    updateFish(t, dt, gp); glassFish.update(t);
     waterTex.offset.set(t * .02, t * .05); glintTex.offset.set(Math.sin(t * .3) * .05, t * .03); glintMat.opacity = .55 + Math.sin(t * 2.1) * .15; seaTex.offset.set(t * .01, t * .015);
     if (camera) { sky.position.copy(camera.position); }
+    stars.material.opacity = starBase * (.85 + .15 * Math.sin(t * 2.3)); stars2.material.opacity = starBase * (.75 + .25 * Math.sin(t * 3.1 + 1.7));
     updatePampas(t);
     const cam = window.__camPos || _v.set(0, 0, 0);
     const sorted = lamps.slice().sort((a, b) => a.distanceToSquared(cam) - b.distanceToSquared(cam));
@@ -442,7 +495,9 @@ export function buildWorld(scene) {
     const band = new THREE.Mesh(ribbons(DATA.paths.filter(p => !p.b).map(p => ({ p: p.p, w: Math.max(3.6, p.w * S * 1.6) })), 0.07), new THREE.MeshBasicMaterial({ color: 0xf5ead8, polygonOffset: true, polygonOffsetFactor: -4 }));
     scene.add(band); blades.visible = false;
   }
-  return { walkMeshes, setTime, update, topPreview, fx: { shark, harbor, fish }, start: findStart(), bounds: B, labels: [canalLbl, hillLbl] };
+  // 수로 근접도 0~1 (배경 물소리 볼륨용): 반경 링 샘플
+  const waterNear = (x, z) => { if (inCanalFast(x, z)) return 1; for (const [r, v] of [[2, .9], [5, .7], [9, .45], [14, .25]]) for (let a = 0; a < 8; a++) if (inCanalFast(x + Math.cos(a * .785) * r, z + Math.sin(a * .785) * r)) return v; return 0; };
+  return { waterNear, walkMeshes, setTime, update, topPreview, fx: { shark, harbor, fish }, start: findStart(), bounds: B, labels: [canalLbl, hillLbl] };
 }
 
 function inRing(r, x, z) { let c = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [xi, zi] = r[i], [xj, zj] = r[j]; if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) c = !c; } return c; }
