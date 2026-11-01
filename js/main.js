@@ -2,7 +2,7 @@
 // 모든 모델/텍스처/사운드는 Three.js 기본 도형과 절차 생성으로 직접 제작. (외부 에셋 없음)
 // 월드 배치는 실제 지도가 아니라 상상 구성(연출)이다. 요소 목록만 디자이너 전달 자료 기준.
 import * as THREE from 'three';
-import { buildWorld, isWalkable, pathX, heightAt } from './world.js';
+import { buildWorld, isWalkable, heightAt, S as MAP_SCALE } from './world.js';
 import { makeGuardian, makeDog } from './characters.js';
 import { TIMES, applyTime } from './times.js';
 import { WaterSound } from './sound.js';
@@ -22,7 +22,7 @@ $('#app').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xffffff, 40, 220);
-const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 800);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 2500);
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0x445533, 1);
 const sun = new THREE.DirectionalLight(0xffffff, 1.5);
@@ -37,10 +37,13 @@ setLoad(70);
 
 const guardian = makeGuardian(); scene.add(guardian.root);
 const dog = makeDog(); scene.add(dog.root);
-const start = new THREE.Vector3(pathX(4), 0, 4);
+// 캐릭터 보조 라이트(약하게, 밤에도 칙칙하지 않게)
+const charFill = new THREE.PointLight(0xffe2c0, 1.2, 6, 1.5); scene.add(charFill);
+const start = new THREE.Vector3(world.start.x, 0, world.start.z); // 남서 입구 근처 보행로(OSM)
 guardian.root.position.copy(start);
-guardian.root.rotation.y = Math.PI; // -z 방향(앞)으로
-dog.root.position.set(start.x + 1, 0, start.z - 0.6);
+guardian.root.rotation.y = world.start.rot; // 북동쪽(수로 방향)
+dog.root.position.set(start.x + Math.cos(world.start.rot) * -0.9, 0, start.z - Math.sin(world.start.rot) * -0.9);
+dog.root.rotation.y = world.start.rot; // 시작 시 보호자와 같은 방향
 
 // 목줄
 const leashMat = new THREE.MeshStandardMaterial({ color: 0x6b3d22, roughness: .7 });
@@ -79,16 +82,19 @@ function lerpTime(a, b, t) {
 }
 
 // ---------- 카메라 ----------
-let yaw = 0, pitch = 0.32, dist = 7.5;
+const _q = new URLSearchParams(location.search);
+let yaw = world.start.rot - Math.PI + +(_q.get('yaw') || 0), pitch = 0.3, dist = 4.2; // 캐릭터가 화면 높이 약 1/3 (디버그: ?yaw=3.14 앞모습)
 const camTarget = new THREE.Vector3().copy(start);
+const TOP = _q.get('view') === 'top'; if (TOP) document.body.classList.add('topview'); // 디버그: 위에서 본 지도 컷(북쪽이 화면 위)
 function updateCamera(dt) {
+  if (TOP) { world.topPreview(); hemi.color.set(0xffffff); hemi.groundColor.set(0x8a9a70); hemi.intensity = 2.2; sun.color.set(0xffffff); sun.intensity = 2.2; renderer.toneMappingExposure = 1.05; const cx = 100 * MAP_SCALE, cz = -90 * MAP_SCALE; camera.up.set(0, 0, -1); camera.position.set(cx, 720, cz + 0.01); camera.lookAt(cx, 0, cz); scene.fog.near = 1e5; scene.fog.far = 1e6; return; }
   camTarget.lerp(guardian.root.position, 1 - Math.exp(-dt * 6));
-  const t = camTarget.clone(); t.y += 1.1;
+  const t = camTarget.clone(); t.y += 0.6;
   camera.position.set(
     t.x + Math.sin(yaw) * Math.cos(pitch) * dist,
     t.y + Math.sin(pitch) * dist,
     t.z + Math.cos(yaw) * Math.cos(pitch) * dist);
-  camera.lookAt(t.x, t.y + 0.6, t.z);
+  camera.lookAt(t.x, t.y + 0.35, t.z);
 }
 
 // ---------- 입력 ----------
@@ -106,7 +112,7 @@ cv.addEventListener('pointermove', e => {
     const [a, b] = [...pointers.values()];
     p.x = e.clientX; p.y = e.clientY;
     const d = Math.hypot(a.x - b.x, a.y - b.y);
-    if (pinchD) dist = THREE.MathUtils.clamp(dist * pinchD / d, 4, 16);
+    if (pinchD) dist = THREE.MathUtils.clamp(dist * pinchD / d, 2.6, 12);
     pinchD = d; dragMoved = 99; return;
   }
   const dx = e.clientX - p.x, dy = e.clientY - p.y;
@@ -119,7 +125,7 @@ const up = e => {
   pointers.delete(e.pointerId); if (pointers.size < 2) pinchD = 0;
 };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-cv.addEventListener('wheel', e => { e.preventDefault(); dist = THREE.MathUtils.clamp(dist * (1 + Math.sign(e.deltaY) * 0.1), 4, 16); }, { passive: false });
+cv.addEventListener('wheel', e => { e.preventDefault(); dist = THREE.MathUtils.clamp(dist * (1 + Math.sign(e.deltaY) * 0.1), 2.6, 12); }, { passive: false });
 
 function clickGround(x, y) {
   ndc.set(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1);
@@ -201,12 +207,12 @@ function frame() {
     moveTarget = null; marker.visible = false;
     const f = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)), r = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
     const dir = r.multiplyScalar(kx).add(f.multiplyScalar(-kz)).normalize();
-    walking = moveChar(g, dir, 3.2, dt);
+    walking = moveChar(g, dir, 4.5, dt); // 축척 0.4 월드에 맞춰 속도 상향
   } else if (moveTarget) {
     tmp.subVectors(moveTarget, g.position); tmp.y = 0;
     const d = tmp.length();
     if (d < 0.15) { moveTarget = null; marker.visible = false; }
-    else { walking = moveChar(g, tmp.normalize(), 3.2, dt); if (!walking) { moveTarget = null; marker.visible = false; } }
+    else { walking = moveChar(g, tmp.normalize(), 4.5, dt); if (!walking) { moveTarget = null; marker.visible = false; } }
   }
   guardian.animate(time, walking);
   marker.rotation.z += dt;
@@ -221,11 +227,12 @@ function frame() {
   else if (dd > 0.35) {
     const run = gd > LEASH * 0.85;
     dogState = run ? 'run' : 'walk';
-    moveChar(dog.root, tmp.normalize(), run ? 5.5 : 3.3, dt);
+    moveChar(dog.root, tmp.normalize(), run ? 7 : 4.6, dt);
     if (gd > LEASH) { // 목줄 한계: 강제로 끌려옴
       tmp.subVectors(dp, g.position).setLength(LEASH); dp.copy(g.position).add(tmp);
     }
-  } else { dogIdle += dt; }
+  } else { dogIdle += dt; // 서 있을 때는 보호자와 같은 방향을 봄
+    let dr = g.rotation.y - dog.root.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); dog.root.rotation.y += dr * Math.min(1, dt * 10); }
   if (dogAction && dogAction !== 'sit') dogState = dogAction;
   if (actionT > 0) { actionT -= dt; if (actionT <= 0) dogAction = null; }
   if (dogState === 'sit' && walking) { dogAction = null; }
@@ -237,10 +244,11 @@ function frame() {
     if (h.userData.life <= 0) { scene.remove(h); hearts.splice(i, 1); }
   }
   window.__camPos = g.position;
-  world.update(time, dt);
+  world.update(time, dt, camera, guardian.root.position);
   // 그림자 카메라를 캐릭터 주변으로
   sun.target.position.copy(g.position);
   sun.position.copy(g.position).add(new THREE.Vector3(cur.sunX, cur.sunY, cur.sunZ).normalize().multiplyScalar(60));
+  charFill.position.copy(camera.position).lerp(g.position, .5); charFill.position.y += 1.2;
   updateCamera(dt);
   // 말풍선 위치
   if (bubbleT > 0) {
@@ -256,7 +264,7 @@ function frame() {
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
 // 테스트/스크린샷용 훅
-window.__game = { setTime: k => { timeIdx = order.indexOf(k); setTime(k, true); }, say };
+window.__game = { setTime: k => { timeIdx = order.indexOf(k); setTime(k, true); }, say, test: { setPos: (x, z, r) => { guardian.root.position.set(x, 0, z); dog.root.position.set(x + .8, 0, z + .8); if (r !== undefined) yaw = r; }, setYaw: v => { yaw = v; }, setCam: (y, p, d) => { yaw = y; pitch = p; dist = d; }, getCam: () => [yaw, pitch, dist], dog: dog.root, guardian: guardian.root, moveChar, isWalkable, heightAt, world } }; // test: tools/walktest.mjs 용
 
 setLoad(100);
 frame();

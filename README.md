@@ -17,4 +17,4 @@ python3 -m http.server 8080
 - 모바일 실기기와 실제 GPU 성능은 아직 확인하지 않았습니다.
 
 ![저녁](docs/shot-dusk.png)
-![밤](docs/shot-night.png)
+![수로의 상어·물고기](docs/shot-shark.png)

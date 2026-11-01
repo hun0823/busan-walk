@@ -5,7 +5,7 @@
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:,">
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
-</head><body>
+<style>body.topview .glass,body.topview .bubble,body.topview .logo{display:none!important}</style></head><body>
 <div id="loading"><img src="assets/210lab-logo-clean.png" alt="210LAB"><div class="bar"><i id="loadbar"></i></div><p>산책 준비 중…</p></div>
 <div id="app"></div>
 <div class="glass top-left"><button id="btnExit" class="round" title="나가기">✕</button>부산 산책 <span class="sep"></span> 북항 친수공원 01</div>
@@ -16,7 +16,7 @@
   <button id="btnSound" title="물소리(직접 합성)">🔇</button>
   <button id="btnSet" title="설정">⚙️</button>
 </div>
-<div class="glass sub-hint">월드 배치는 실제 지도가 아닌 상상 구성(연출)입니다 · WASD/방향키 이동</div>
+<div class="glass sub-hint">OSM 실측 지도 기반 · 축척 0.4배 · 건물 높이·나무·가로등은 연출 · WASD/방향키 이동</div>
 <div id="toast" class="glass toast hidden"></div>
 <div id="bubble" class="bubble hidden">멍!</div>
 <div class="glass bottom-bar">
@@ -26,7 +26,7 @@
   <button data-act="photo"><span>📷</span>사진</button>
 </div>
 <div id="flash"></div>
-<div class="note">※ 일부 풍경은 연출입니다</div>
+<div class="note">Map data © OpenStreetMap contributors (ODbL) · 지도 축척 0.4배 · 건물 높이·나무·관목·가로등·야생화·풀포기·먼 풍경·물고기·상어·항만 크레인·배는 연출 · 해안선·부두 육지는 OSM(map.osm)</div>
 <img class="logo" src="assets/210lab-logo-clean.png" alt="210LAB">
 <script type="module" src="js/main.js"></script>
 </body></html>
