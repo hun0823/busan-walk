@@ -2,8 +2,10 @@
 // 모든 모델/텍스처/사운드는 Three.js 기본 도형과 절차 생성으로 직접 제작. (외부 에셋 없음)
 // 월드 배치는 실제 지도가 아니라 상상 구성(연출)이다. 요소 목록만 디자이너 전달 자료 기준.
 import * as THREE from 'three';
-import { buildWorld, isWalkable, heightAt, S as MAP_SCALE } from './world.js';
+import { S as MAP_SCALE } from './world.js';
+import { MAPS, mapById, getWorld, setActive, isWalkable, heightAt } from './maps.js';
 import { makeGuardian, makeDog } from './characters.js';
+import { initMapView } from './mapview.js';
 import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js';
 import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js';
 import { NetState, initNetStatus } from './net.js';
@@ -25,7 +27,8 @@ $('#app').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xffffff, 40, 220);
-const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 2500);
+const camFov = () => innerWidth / innerHeight < 0.8 ? 62 : 50;
+const camera = new THREE.PerspectiveCamera(camFov(), innerWidth / innerHeight, 0.1, 2500);
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0x445533, 1);
 const sun = new THREE.DirectionalLight(0xffffff, 1.5);
@@ -35,7 +38,11 @@ Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 25, bottom: -25, n
 scene.add(hemi, sun, sun.target);
 
 setLoad(30);
-const world = buildWorld(scene);
+const _q0m = new URLSearchParams(location.search);
+const LSm = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+let curMap = mapById(_q0m.get('map')) ? _q0m.get('map') : mapById(LSm.get('bw.map')) ? LSm.get('bw.map') : 'bukhang';
+let world = await getWorld(curMap, scene); setActive(world);
+const savedPos = id => { const v = (LSm.get('bw.pos.' + id) || '').split(',').map(Number); return v.length === 3 && v.every(Number.isFinite) ? { x: v[0], z: v[1], rot: v[2] } : null; };
 const sound = new BgSound(); // 배경음(직접 합성) — 첫 터치/클릭 후 시작, 음소거는 localStorage bw.mute
 let nearAcc = 0;
 setLoad(70);
@@ -48,11 +55,12 @@ let dog = makeDog(breedById(breedId)); scene.add(dog.root);
 function swapDog(id) { const old = dog; dog = makeDog(breedById(id)); dog.root.position.copy(old.root.position); dog.root.rotation.y = old.root.rotation.y; scene.remove(old.root); scene.add(dog.root); breedId = id; }
 // 캐릭터 보조 라이트(약하게, 밤에도 칙칙하지 않게)
 const charFill = new THREE.PointLight(0xffe2c0, 1.2, 6, 1.5); scene.add(charFill);
-const start = new THREE.Vector3(world.start.x, 0, world.start.z); // 남서 입구 근처 보행로(OSM)
+const _sp0 = (!_q0m.has('fresh') && savedPos(curMap) && world.isWalkable(savedPos(curMap).x, savedPos(curMap).z)) ? savedPos(curMap) : world.start;
+const start = new THREE.Vector3(_sp0.x, heightAt(_sp0.x, _sp0.z), _sp0.z); // 남서 입구 근처 보행로(OSM)
 guardian.root.position.copy(start);
-guardian.root.rotation.y = world.start.rot; // 북동쪽(수로 방향)
-dog.root.position.set(start.x + Math.cos(world.start.rot) * -0.9, 0, start.z - Math.sin(world.start.rot) * -0.9);
-dog.root.rotation.y = world.start.rot; // 시작 시 보호자와 같은 방향
+guardian.root.rotation.y = _sp0.rot; // 북동쪽(수로 방향)
+dog.root.position.set(start.x - Math.sin(_sp0.rot) * 0.9, start.y, start.z - Math.cos(_sp0.rot) * 0.9);
+dog.root.rotation.y = _sp0.rot; // 시작 시 보호자와 같은 방향
 
 // 목줄
 const leashMat = new THREE.MeshStandardMaterial({ color: 0x6b3d22, roughness: .7 });
@@ -94,17 +102,33 @@ function setTime(key, instant) { // 관리자/테스트: 'morning'|'noon'|'eveni
 
 // ---------- 카메라 ----------
 const _q = new URLSearchParams(location.search);
-let yaw = world.start.rot - Math.PI + +(_q.get('yaw') || 0), pitch = 0.3, dist = 4.2; // 캐릭터가 화면 높이 약 1/3 (디버그: ?yaw=3.14 앞모습)
+const PORTRAIT = () => innerWidth / innerHeight < 0.8; // v3.7: 세로 화면은 더 멀리·넓게
+let yaw = _sp0.rot - Math.PI + +(_q.get('yaw') || 0), pitch = PORTRAIT() ? 0.36 : 0.3, dist = PORTRAIT() ? 7.2 : 4.6; // 캐릭터가 화면 높이 약 1/3 (디버그: ?yaw=3.14 앞모습)
 const camTarget = new THREE.Vector3().copy(start);
+const _cray = new THREE.Raycaster(), _cdir = new THREE.Vector3(); let camDS = dist, camPS = pitch;
 const TOP = _q.get('view') === 'top'; if (TOP) document.body.classList.add('topview'); // 디버그: 위에서 본 지도 컷(북쪽이 화면 위)
 function updateCamera(dt) {
-  if (TOP) { world.topPreview(); hemi.color.set(0xffffff); hemi.groundColor.set(0x8a9a70); hemi.intensity = 2.2; sun.color.set(0xffffff); sun.intensity = 2.2; renderer.toneMappingExposure = 1.05; const cx = 100 * MAP_SCALE, cz = -90 * MAP_SCALE; camera.up.set(0, 0, -1); camera.position.set(cx, 560, cz + 0.01); camera.lookAt(cx, 0, cz); scene.fog.near = 1e5; scene.fog.far = 1e6; return; }
+  if (TOP) { world.topPreview(); hemi.color.set(0xffffff); hemi.groundColor.set(0x8a9a70); hemi.intensity = 2.2; sun.color.set(0xffffff); sun.intensity = 2.2; renderer.toneMappingExposure = 1.05; const tv = world.topView || {}, cx = tv.cx ?? 100 * MAP_SCALE, cz = tv.cz ?? -90 * MAP_SCALE, th = tv.span ? tv.span / 2 / Math.tan(25 * Math.PI / 180) * 1.02 + 60 : 560; camera.up.set(0, 0, -1); camera.position.set(cx, th, cz + 0.01); camera.far = Math.max(2500, th + 200); camera.updateProjectionMatrix(); camera.lookAt(cx, 0, cz); scene.fog.near = 1e5; scene.fog.far = 1e6; return; }
   camTarget.lerp(guardian.root.position, 1 - Math.exp(-dt * 6));
   const t = camTarget.clone(); t.y += 0.6;
+  // v3.7 카메라 보정: 장애물(건물·가로등·나무)이 가리면 앞으로 당기되 최소 거리 2.2를 지키고, 모자라면 위로 올려 넘겨봄. 지면 아래로 들어가지 않게.
+  let cd = dist, pe = pitch;
+  if (world.occluders && world.occluders.length) {
+    for (let k = 0; k < 4; k++) {
+      _cdir.set(Math.sin(yaw) * Math.cos(pe), Math.sin(pe), Math.cos(yaw) * Math.cos(pe)); _cray.set(t, _cdir); _cray.near = 0.35; _cray.far = dist;
+      const h = _cray.intersectObjects(world.occluders, false)[0];
+      if (!h) { cd = dist; break; }
+      cd = h.distance - 0.35; if (cd >= 2.2) break;
+      cd = 2.2; pe = Math.min(1.25, pe + 0.3);
+    }
+  }
+  camDS += (cd - camDS) * (cd < camDS ? 1 : 1 - Math.exp(-dt * 3)); camPS += (pe - camPS) * (1 - Math.exp(-dt * 8));
+  cd = Math.max(2.2, camDS); pe = camPS;
   camera.position.set(
-    t.x + Math.sin(yaw) * Math.cos(pitch) * dist,
-    t.y + Math.sin(pitch) * dist,
-    t.z + Math.cos(yaw) * Math.cos(pitch) * dist);
+    t.x + Math.sin(yaw) * Math.cos(pe) * cd,
+    t.y + Math.sin(pe) * cd,
+    t.z + Math.cos(yaw) * Math.cos(pe) * cd);
+  const gy = heightAt(camera.position.x, camera.position.z) + 0.5; if (camera.position.y < gy) camera.position.y = gy;
   camera.lookAt(t.x, t.y + 0.35, t.z);
 }
 
@@ -338,14 +362,14 @@ function frame() {
   if (bubbleT > 0) {
     bubbleT -= dt;
     const p = dog.root.position.clone(); p.y += 1.25; p.project(camera);
-    const b = $('#bubble'); b.style.left = (p.x * .5 + .5) * innerWidth + 'px'; b.style.top = (-p.y * .5 + .5) * innerHeight + 'px';
+    const b = $('#bubble'); const bw = b.offsetWidth || 0; b.style.left = Math.min(innerWidth - bw / 2 - 8, Math.max(bw / 2 + 8, (p.x * .5 + .5) * innerWidth)) + 'px'; b.style.top = (-p.y * .5 + .5) * innerHeight + 'px';
     if (bubbleT <= 0) b.classList.add('hidden');
   }
   renderer.render(scene, camera);
   window.__perf.frames++; window.__perf.total += performance.now() - t0;
   requestAnimationFrame(frame);
 }
-addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.fov = camFov(); camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
 // 테스트/스크린샷용 훅
 // 디버그: ?breeds=grid → 시작 위치 앞에 20종을 줄지어 세움(스크린샷용, 연출)
@@ -359,7 +383,43 @@ function lineup(n0 = 0, n = 20, cols = 5, gap = 1.3, fwd = 4) { // 카메라 앞
   const p0 = guardian.root.position; breedsGrid.forEach(d => d.root.visible = false);
   breedsGrid.slice(n0, n0 + n).forEach((d, i) => { const c = i % cols, row = Math.floor(i / cols); const p = p0.clone().addScaledVector(f, fwd + row * 1.6).addScaledVector(r, (c - (cols - 1) / 2) * gap); d.root.position.set(p.x, heightAt(p.x, p.z), p.z); d.root.rotation.y = Math.atan2(-f.x, -f.z); d.root.visible = true; });
 }
-window.__game = { sound, breedsGrid, lineup, setTime: k => setTime(k, true), say, startRest, stopRest, openDogModal, swapDog, get rest() { return rest.on; }, test: { setPos: (x, z, r) => { guardian.root.position.set(x, 0, z); dog.root.position.set(x + .8, 0, z + .8); if (r !== undefined) yaw = r; }, setYaw: v => { yaw = v; }, setCam: (y, p, d) => { yaw = y; pitch = p; dist = d; }, getCam: () => [yaw, pitch, dist], get dog() { return dog.root; }, guardian: guardian.root, moveChar, isWalkable, heightAt, world } }; // test: tools/walktest.mjs 용
+
+// ---------- 맵 이동(같은 클라이언트 안에서 월드만 교체. 서버 이동 아님 — 오프라인) ----------
+const setTitle = () => { const m = mapById(curMap); $('#title').innerHTML = `<span class="brand">부산 산책</span><span class="sep"></span><b class="mapnm">${m.name} ${m.sub}</b>`; document.title = `부산 산책 | ${m.name}`; };
+setTitle(); LSm.set('bw.map', curMap);
+const savePos = () => { const p = guardian.root.position; LSm.set('bw.pos.' + curMap, `${p.x.toFixed(2)},${p.z.toFixed(2)},${guardian.root.rotation.y.toFixed(3)}`); };
+setInterval(savePos, 2000); addEventListener('pagehide', savePos);
+let switching = false;
+async function switchMap(id) {
+  if (switching || id === curMap || !mapById(id)) { closeMapMenu(); return false; }
+  switching = true; closeMapMenu(); savePos();
+  const fade = $('#mapFade'); fade.querySelector('b').textContent = mapById(id).name; fade.querySelector('small').textContent = '맵 불러오는 중…'; fade.classList.add('on');
+  await new Promise(r => setTimeout(r, 380)); // 페이드 인
+  try {
+    if (rest.on) stopRest();
+    const w = await getWorld(id, scene);
+    world = w; curMap = id; setActive(w); LSm.set('bw.map', id); setTitle();
+    const sp = savedPos(id); const s0 = sp && w.isWalkable(sp.x, sp.z) ? sp : w.start;
+    guardian.root.position.set(s0.x, heightAt(s0.x, s0.z), s0.z); guardian.root.rotation.y = s0.rot;
+    dog.root.position.set(s0.x - Math.sin(s0.rot) * .9, heightAt(s0.x, s0.z), s0.z - Math.cos(s0.rot) * .9); dog.root.rotation.y = s0.rot;
+    camTarget.copy(guardian.root.position); yaw = s0.rot - Math.PI; moveTarget = null; if (marker) marker.visible = false;
+    applyTime(cur, { scene, hemi, sun, renderer, world }); // 시간 위상·사운드는 그대로 이어짐
+    sound.setNear(world.waterNear(s0.x, s0.z));
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    toast(`${mapById(id).name}에 도착했어요`);
+  } catch (e) { console.warn('맵 이동 실패', e); fade.querySelector('small').textContent = '불러오기 실패'; await new Promise(r => setTimeout(r, 900)); }
+  fade.classList.remove('on'); switching = false; return true;
+}
+const mapMenu = $('#mapMenu');
+function renderMapMenu() { mapMenu.querySelector('.list').innerHTML = MAPS.map(m => `<button data-map="${m.id}" class="${m.id === curMap ? 'cur' : ''}"><span class="no">${m.sub}</span><span class="nm">${m.name}<small>${m.desc}</small></span>${m.id === curMap ? '<em>현재</em>' : ''}</button>`).join(''); }
+function openMapMenu() { renderMapMenu(); mapMenu.classList.add('open'); }
+function closeMapMenu() { mapMenu.classList.remove('open'); }
+$('#srv').addEventListener('click', e => { e.stopPropagation(); mapMenu.classList.contains('open') ? closeMapMenu() : openMapMenu(); });
+mapMenu.addEventListener('click', e => { e.stopPropagation(); const b = e.target.closest('[data-map]'); if (b) switchMap(b.dataset.map); });
+mapMenu.addEventListener('pointerdown', e => e.stopPropagation());
+addEventListener('pointerdown', e => { if (mapMenu.classList.contains('open') && !e.target.closest('#mapMenu,#srv')) closeMapMenu(); });
+const mapView = initMapView({ maps: MAPS, getCur: () => curMap, getMe: () => ({ x: guardian.root.position.x, z: guardian.root.position.z, rot: guardian.root.rotation.y }) });
+window.__game = { mapView, openMapMenu, switchMap,  sound, breedsGrid, lineup, setTime: k => setTime(k, true), say, startRest, stopRest, openDogModal, swapDog, get rest() { return rest.on; }, test: { setPos: (x, z, r) => { guardian.root.position.set(x, heightAt(x, z), z); dog.root.position.set(x + .8, heightAt(x + .8, z + .8), z + .8); if (r !== undefined) yaw = r; }, setYaw: v => { yaw = v; }, setCam: (y, p, d) => { yaw = y; pitch = p; dist = d; }, getCam: () => [yaw, pitch, dist], get dog() { return dog.root; }, guardian: guardian.root, moveChar, get isWalkable() { return isWalkable; }, get heightAt() { return heightAt; }, get world() { return world; }, switchMap: id => switchMap(id), get map() { return curMap; } } }; // test: tools/walktest.mjs 용
 
 setLoad(100);
 frame();

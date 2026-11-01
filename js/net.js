@@ -1,7 +1,7 @@
 // 서버 상태 표시. 현재 실제 서버·멀티플레이 없음 → OFFLINE_SOLO만 사용. 서버를 붙이면 set(state, count)만 호출하면 됨.
 export const NetState = Object.freeze({ OFFLINE_SOLO: 'offline_solo', CONNECTING: 'connecting', ONLINE: 'online', ERROR: 'error' });
 const VIEW = {
-  offline_solo: { cls: 'off', text: () => '서버 · 혼자 플레이(오프라인)' },
+  offline_solo: { cls: 'off', text: () => '오프라인 · 맵 이동' }, // 클릭하면 맵 선택(같은 클라이언트 안 이동, 서버 아님)
   connecting: { cls: 'wait', text: () => '서버 · 연결 중…' },
   online: { cls: 'on', text: n => `서버 · 접속 ${n}명` },
   error: { cls: 'err', text: () => '서버 · 연결 실패' },

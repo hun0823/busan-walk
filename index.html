@@ -8,7 +8,9 @@
 <style>body.topview .glass,body.topview .bubble{display:none!important}</style></head><body>
 <div id="loading"><img src="assets/210lab-logo-clean.png" alt="210LAB"><div class="bar"><i id="loadbar"></i></div><p>산책 준비 중…</p></div>
 <div id="app"></div>
-<div class="glass top-left"><button id="btnExit" class="round" title="나가기">✕</button><span id="title">부산 산책 <span class="sep"></span> 북항 친수공원 01</span><span id="srv" class="srv off"><i></i><b>서버 · 혼자 플레이(오프라인)</b></span></div>
+<div class="glass top-left"><button id="btnExit" class="round" title="나가기">✕</button><span id="title"><span class="brand">부산 산책</span><span class="sep"></span><b class="mapnm">북항 친수공원 01</b></span><span id="srv" class="srv off" role="button" tabindex="0" title="오프라인 · 맵 이동"><i></i><b>오프라인 · 맵 이동</b><u>▾</u></span></div>
+<div id="mapMenu" class="glass panel mapmenu"><h4>오프라인 · 맵 이동 <small>서버 접속이 아니라 이 기기 안에서 지도를 바꿔요</small></h4><div class="list"></div></div>
+<div id="mapFade"><div><b></b><small></small><i></i></div></div>
 <div class="glass top-hint">바닥 클릭 · 드래그로 둘러보기 · 휠로 확대/축소</div>
 <div class="glass top-right">
   <span id="timeLbl" class="tlbl" title="시간대(현실시간 20분마다 아침→점심→저녁)">🌇 저녁</span>
@@ -29,6 +31,6 @@
   <button data-act="photo"><span>📷</span>사진</button>
 </div>
 <div id="flash"></div>
-<div class="note">© OpenStreetMap contributors (ODbL) · 일부 연출 ⓘ</div>
+<div class="note">© OpenStreetMap contributors (ODbL) · 고도 Copernicus DEM(Open-Meteo) · 일부 연출 ⓘ</div>
 <script type="module" src="js/main.js"></script>
 </body></html>

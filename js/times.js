@@ -34,7 +34,7 @@ export function presetFor(phase, p, Color) {
 }
 export const TIMES = BASE;
 export function applyTime(c, { scene, hemi, sun, renderer, world }) {
-  scene.fog.color.set(c.fog); scene.fog.near = c.fogNear; scene.fog.far = c.fogFar;
+  scene.fog.color.set(c.fog); scene.fog.near = c.fogNear; scene.fog.far = c.fogFar * (world.fogMul || 1);
   hemi.color.set(c.hemiSky); hemi.groundColor.set(c.hemiGround); hemi.intensity = c.hemiI;
   sun.color.set(c.sunCol); sun.intensity = c.sunI;
   renderer.toneMappingExposure = c.exposure;

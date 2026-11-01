@@ -20,6 +20,7 @@ const R = 2, GW = Math.ceil((B.x1 - B.x0) * R), GH = Math.ceil((B.z1 - B.z0) * R
 const GLASS_IDX = DATA.buildings.findIndex(b => b.p.some(([x, y]) => Math.abs(x - .5) < .6 && Math.abs(y + 336.5) < .6));
 const GLASS_POLY = GLASS_IDX >= 0 ? DATA.buildings[GLASS_IDX].p : [];
 export const GLASS_LINK = [-29, 68.6, -24.6, 71.6]; // 공원 보행로 → 유리 데크 연결 경사로(월드 좌표, 연출: OSM상 1.8m 틈을 메움)
+let bridgeDist, bridgeFixed, dbg;
 const grid = (() => {
   const c = document.createElement('canvas'); c.width = GW; c.height = GH; const g = c.getContext('2d');
   const tp = p => { const [x, z] = W(p); return [(x - B.x0) * R, (z - B.z0) * R]; };
@@ -34,15 +35,36 @@ const grid = (() => {
   g.globalCompositeOperation = 'destination-in'; for (const p of DATA.park) fillRings(p, '#fff');
   g.globalCompositeOperation = 'source-over'; fillRings([GLASS_POLY], '#f0f');
   if (GLASS_POLY.length) { g.strokeStyle = '#f00'; g.lineWidth = 3 * R; g.lineCap = 'round'; g.beginPath(); g.moveTo((GLASS_LINK[0] - B.x0) * R, (GLASS_LINK[1] - B.z0) * R); g.lineTo((GLASS_LINK[2] - B.x0) * R, (GLASS_LINK[3] - B.z0) * R); g.stroke(); fillRings([GLASS_POLY], '#f0f'); } // 공원↔데크 연결 경사로(연출) // 유리 데크(북항마리나 자리, 연출): 걷기 가능(R) + 유리(B)
-  return g.getImageData(0, 0, GW, GH).data;
+  const d = g.getImageData(0, 0, GW, GH).data;
+  // 다리 진입 턱 보정(v3.6): 다리 윤곽과 보행로 사이 1~2칸 틈(수로 가장자리 여유선·공원 경계 클립 래스터 오차)이 막혀 '못 건넘' 현상.
+  // 다리와 보행 칸 사이(두 거리 합 ≤4.5, 공원 밖은 ≤4) 막힌 칸을 걷기 가능으로(수로 물 안쪽·공원 밖 제외). 높이는 다리 가장자리에서 경사로로 내려감.
+  const cv = document.createElement('canvas'); cv.width = GW; cv.height = GH; const g2 = cv.getContext('2d');
+ g2.fillStyle = '#fff'; for (const p of DATA.park) { g2.beginPath(); for (const r of p) r.forEach((q, i) => { const [a, b] = tp(q); i ? g2.lineTo(a, b) : g2.moveTo(a, b); }); g2.fill('evenodd'); }
+  const pm = g2.getImageData(0, 0, GW, GH).data;
+  g2.clearRect(0, 0, GW, GH); g2.fillStyle = '#fff'; for (const p of DATA.canal) { g2.beginPath(); for (const r of p) r.forEach((q, i) => { const [a, b] = tp(q); i ? g2.lineTo(a, b) : g2.moveTo(a, b); }); g2.fill('evenodd'); }
+  const wm = g2.getImageData(0, 0, GW, GH).data;
+  const N = GW * GH, isB = i => d[i * 4 + 3] > 128 && d[i * 4] > 128 && (d[i * 4 + 1] > 128 || d[i * 4 + 2] > 128), isG = i => d[i * 4] > 128 && d[i * 4 + 3] > 128 && d[i * 4 + 1] < 128 && d[i * 4 + 2] < 128; // B: 다리·유리 데크(높은 바닥)
+  const dist = (pred) => { const D = new Float32Array(N).fill(1e9); for (let i = 0; i < N; i++) if (pred(i)) D[i] = 0;
+    for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) { const k = j * GW + i; if (i) D[k] = Math.min(D[k], D[k - 1] + 1); if (j) D[k] = Math.min(D[k], D[k - GW] + 1); if (i && j) D[k] = Math.min(D[k], D[k - GW - 1] + 1.414); if (j && i < GW - 1) D[k] = Math.min(D[k], D[k - GW + 1] + 1.414); }
+    for (let j = GH - 1; j >= 0; j--) for (let i = GW - 1; i >= 0; i--) { const k = j * GW + i; if (i < GW - 1) D[k] = Math.min(D[k], D[k + 1] + 1); if (j < GH - 1) D[k] = Math.min(D[k], D[k + GW] + 1); if (i < GW - 1 && j < GH - 1) D[k] = Math.min(D[k], D[k + GW + 1] + 1.414); if (j < GH - 1 && i) D[k] = Math.min(D[k], D[k + GW - 1] + 1.414); }
+    return D; };
+  const dB = dist(isB), dG = dist(isG); let fixed = 0;
+  for (let i = 0; i < N; i++) { const k = i * 4; if (d[k] > 128 && d[k + 3] > 128) continue; if (wm[k + 3] > 128) continue; if (dB[i] + dG[i] <= 4.5 * R && (pm[k + 3] > 128 || dB[i] + dG[i] <= 4 * R)) { d[k] = 255; d[k + 1] = 0; d[k + 2] = 0; d[k + 3] = 255; fixed++; } }
+  // 대각선으로만 이어진 계단 모양 틈 정리(높은 바닥 근처, 8이웃 중 5칸 이상 걷기 가능이면 채움)
+  const wk = i => d[i * 4] > 128 && d[i * 4 + 3] > 128;
+  for (let it = 0; it < 2; it++) { const add = []; for (let j = 1; j < GH - 1; j++) for (let i = 1; i < GW - 1; i++) { const q = j * GW + i; if (wk(q) || dB[q] > 6 * R || wm[q * 4 + 3] > 128) continue; let c = 0; for (const o of [1, -1, GW, -GW, GW + 1, GW - 1, -GW + 1, -GW - 1]) c += wk(q + o); if (c >= 5) add.push(q); } for (const q of add) { d[q * 4] = 255; d[q * 4 + 1] = 0; d[q * 4 + 2] = 0; d[q * 4 + 3] = 255; fixed++; } }
+  bridgeDist = dist(isB); bridgeFixed = fixed; dbg = { dB, dG, pm, wm };
+  return d;
 })();
 function cell(x, z) { const i = Math.floor((x - B.x0) * R), j = Math.floor((z - B.z0) * R); if (i < 0 || j < 0 || i >= GW || j >= GH) return -1; return (j * GW + i) * 4; }
 export function isWalkable(x, z) { const k = cell(x, z); return k >= 0 && grid[k] > 128 && grid[k + 3] > 128; }
 const onBridge = (x, z) => { const k = cell(x, z); return k >= 0 && grid[k + 1] > 128 && grid[k + 3] > 128; };
 export const BRIDGE_H = 0.3;
+export const RAMP = 1.2; // 다리 가장자리 경사로 폭(월드 단위, 연출)
+const bridgeH = (x, z) => { const k = cell(x, z); if (k < 0) return 0; const dd = bridgeDist[k / 4] / R; return dd <= 0 ? BRIDGE_H : Math.max(0, BRIDGE_H * (1 - dd / RAMP)); };
 const onGlass = (x, z) => { const k = cell(x, z); return k >= 0 && grid[k + 2] > 128 && grid[k + 3] > 128 && grid[k + 1] < 128; };
 export const GLASS_H = 0.35;
-export function heightAt(x, z) { return onBridge(x, z) ? BRIDGE_H : onGlass(x, z) ? GLASS_H : 0; }
+export function heightAt(x, z) { return onGlass(x, z) ? GLASS_H : bridgeH(x, z); }
 export { onGlass };
 
 // ---- 기하 도우미 ----
@@ -87,7 +109,7 @@ function findStart() {
   return { x: best.x, z: best.z, rot: START_ROT }; // 북항대교가 화면 한쪽에 보이는 방향
 }
 
-export const __test = { onBridge: (x, z) => onBridge(x, z) };
+export const __test = { onBridge: (x, z) => onBridge(x, z), get bridgeFixed() { return bridgeFixed; }, probe(x, z) { const k = cell(x, z); return [dbg.dB[k / 4], dbg.dG[k / 4], dbg.pm[k + 3], dbg.wm[k + 3], grid[k], grid[k + 3]]; } };
 export function buildWorld(scene) {
   const walkMeshes = [], lamps = [], emissives = { lamp: [], city: [], deco: [] };
   let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -201,11 +223,11 @@ export function buildWorld(scene) {
   // 다리: 윤곽은 OSM, 높이·난간은 연출
   const bridgeMat = M(0xe7dfd4, { roughness: .7 });
   const bpolys = DATA.bridges.map(b => [b.poly]);
-  const bG = new THREE.ExtrudeGeometry(shapes(bpolys), { depth: .25, bevelEnabled: false }); bG.rotateX(-Math.PI / 2); bG.translate(0, BRIDGE_H - .25, 0);
+  const bG = new THREE.ExtrudeGeometry(shapes(bpolys), { depth: .05, bevelEnabled: true, bevelThickness: BRIDGE_H - .05, bevelSize: RAMP, bevelSegments: 3, curveSegments: 4 }); bG.rotateX(-Math.PI / 2); // v3.6: 가장자리 둥근 경사로(턱 없음)
   const bMesh = new THREE.Mesh(bG, bridgeMat); bMesh.castShadow = bMesh.receiveShadow = true; scene.add(bMesh); walkMeshes.push(bMesh);
   const blG = ribbons(DATA.bridgeLines.map(b => ({ p: b.p, w: Math.max(1.6, b.w * S) })), BRIDGE_H + .02);
   const bl = new THREE.Mesh(blG, bridgeMat); bl.receiveShadow = true; scene.add(bl); walkMeshes.push(bl);
-  const bpaveTex = canvasTex(128, 128, (c, w, h) => { c.fillStyle = '#d9cbb6'; c.fillRect(0, 0, w, h); for (let y = 0; y < 8; y++) for (let x = 0; x < 4; x++) { c.fillStyle = `hsl(${30 + rnd() * 10},${18 + rnd() * 10}%,${72 + rnd() * 10}%)`; c.fillRect(x * 32 + (y % 2) * 16 + 1, y * 16 + 1, 30, 14); } }, [1, 1]);
+  const bpaveTex = canvasTex(128, 128, (c, w, h) => { c.fillStyle = '#c9b9a2'; c.fillRect(0, 0, w, h); for (let y = 0; y < 8; y++) for (let x = 0; x < 4; x++) { c.fillStyle = `hsl(${30 + rnd() * 10},${18 + rnd() * 10}%,${72 + rnd() * 10}%)`; c.fillRect(x * 32 + (y % 2) * 16 + 1, y * 16 + 1, 30, 14); } }, [1, 1]);
   bridgeMat.map = bpaveTex; planarUV(bG, .45); planarUV(blG, .45);
 
   // 건물: 윤곽 OSM, 높이·색은 연출(높이 데이터 없음) — 높이 구간별 4개 메쉬로 병합
@@ -464,7 +486,20 @@ export function buildWorld(scene) {
     tubes(railRuns, BRIDGE_H + .45, .025, M(0x9aa0a8, { metalness: .5, roughness: .4 })); // 중간 가로대
     scene.add(new THREE.Mesh(ribbons(railRuns.map(rn => ({ p: rn.map(([x, z]) => [x / S, -z / S]), w: .28 })), BRIDGE_H + .1), M(0xbdb3a4, { roughness: .9 }))); // 연석
     const lampM = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xffd89a }); emissives.lamp.push(lampM);
-    const bl2 = new THREE.InstancedMesh(new THREE.SphereGeometry(.09, 8, 6), lampM, lampP.length); lampP.forEach(([x, z], i) => { mtx.makeTranslation(x, BRIDGE_H + 1.0, z); bl2.setMatrixAt(i, mtx); }); scene.add(bl2);
+    const lampMat2 = new THREE.MeshStandardMaterial({ color: 0xfff0d0, emissive: 0xffc070, emissiveIntensity: 1 }); emissives.lamp.push(lampMat2);
+    const bl2 = new THREE.InstancedMesh(new THREE.SphereGeometry(.07, 8, 6), lampM, lampP.length); lampP.forEach(([x, z], i) => { mtx.makeTranslation(x, BRIDGE_H + 1.0, z); bl2.setMatrixAt(i, mtx); }); scene.add(bl2);
+    // v3.6 다리 업그레이드(연출): 둥근 덱 테두리(두께감)·난간 기둥 볼캡·교각·가로등 기둥
+    tubes(railRuns, BRIDGE_H - .1, .16, M(0xf1ebe2, { roughness: .55 })); // 둥근 덱 테두리
+    tubes(railRuns, BRIDGE_H - .3, .1, M(0xb9b0a3, { roughness: .8 })); // 덱 아래 그림자 띠(두께)
+    const capG = new THREE.SphereGeometry(.085, 10, 8); capG.translate(0, BRIDGE_H + .95, 0);
+    const caps2 = new THREE.InstancedMesh(capG, handM, postP.length); postP.forEach(([x, z], i) => { mtx.makeTranslation(x, 0, z); caps2.setMatrixAt(i, mtx); }); scene.add(caps2);
+    const pierP = []; railRuns.forEach(rn => rn.forEach((q, k) => { if (k % 7 === 3) pierP.push(q); }));
+    const pierG = new THREE.CapsuleGeometry(.2, BRIDGE_H + .5, 4, 10); pierG.translate(0, (BRIDGE_H - .45) / 2 - .1, 0);
+    const piers = new THREE.InstancedMesh(pierG, M(0xddd5c8, { roughness: .7 }), pierP.length); pierP.forEach(([x, z], i) => { mtx.makeTranslation(x, 0, z); piers.setMatrixAt(i, mtx); }); scene.add(piers);
+    const lpG = new THREE.CylinderGeometry(.045, .06, 1.7, 8); lpG.translate(0, BRIDGE_H + .85, 0);
+    const lpoles = new THREE.InstancedMesh(lpG, M(0x4a4f57, { roughness: .4, metalness: .5 }), lampP.length); lampP.forEach(([x, z], i) => { mtx.makeTranslation(x, 0, z); lpoles.setMatrixAt(i, mtx); }); scene.add(lpoles);
+    const lhG = new THREE.CapsuleGeometry(.12, .14, 6, 10); lhG.translate(0, BRIDGE_H + 1.85, 0);
+    const lheads = new THREE.InstancedMesh(lhG, lampMat2, lampP.length); lampP.forEach(([x, z], i) => { mtx.makeTranslation(x, 0, z); lheads.setMatrixAt(i, mtx); }); scene.add(lheads);
     const archM = M(0xe9e4dc, { roughness: .5 });
     arches.forEach(rn => { const n = rn.length - 1; const pts = rn.map(([x, z], k) => new THREE.Vector3(x, -.55 + (BRIDGE_H - .05 + .55) * Math.sin(Math.PI * k / n), z)); scene.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), n * 2, .09, 8, false), archM));
       for (let k = 2; k < n - 1; k += 2) { const p = pts[k]; const h = BRIDGE_H - .25 - p.y; if (h < .08) continue; const sp = new THREE.Mesh(new THREE.CylinderGeometry(.03, .03, h, 5), archM); sp.position.set(p.x, p.y + h / 2, p.z); scene.add(sp); } }); }
