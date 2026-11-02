@@ -2,15 +2,16 @@
 // 모든 모델/텍스처/사운드는 Three.js 기본 도형과 절차 생성으로 직접 제작. (외부 에셋 없음)
 // 월드 배치는 실제 지도가 아니라 상상 구성(연출)이다. 요소 목록만 디자이너 전달 자료 기준.
 import * as THREE from 'three';
-import { S as MAP_SCALE } from './world.js?v=39d';
-import { MAPS, mapById, getWorld, setActive, isWalkable, heightAt } from './maps.js?v=39d';
-import { makeGuardian, makeDog } from './characters.js?v=39d';
-import { initMapView } from './mapview.js?v=39d';
-import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js?v=39d';
-import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js?v=39d';
-import { NetState, initNetStatus } from './net.js?v=39d';
-import { makeMat } from './mat.js?v=39d';
-import { BgSound } from './sound.js?v=39d';
+import { S as MAP_SCALE } from './world.js?v=39f';
+import { MAPS, mapById, getWorld, setActive, isWalkable, heightAt } from './maps.js?v=39f';
+import { makeGuardian, makeDog } from './characters.js?v=39f';
+import { initMapView } from './mapview.js?v=39f';
+import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js?v=39f';
+import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js?v=39f';
+import { NetState, initNetStatus, NetClient, ANIM, SAY_TEXT } from './net.js?v=39f';
+import { SERVER_URL, NET } from './config.js?v=39f';
+import { makeMat } from './mat.js?v=39f';
+import { BgSound } from './sound.js?v=39f';
 
 const $ = s => document.querySelector(s);
 const setLoad = (p, t) => { $('#loadbar').style.width = p + '%'; if (t && window.__step) window.__step(t); };
@@ -60,7 +61,8 @@ let dog = makeDog(breedById(breedId)); scene.add(dog.root);
 function swapDog(id) { const old = dog; dog = makeDog(breedById(id)); dog.root.position.copy(old.root.position); dog.root.rotation.y = old.root.rotation.y; scene.remove(old.root); scene.add(dog.root); breedId = id; }
 // 캐릭터 보조 라이트(약하게, 밤에도 칙칙하지 않게)
 const charFill = new THREE.PointLight(0xffe2c0, 1.2, 6, 1.5); scene.add(charFill);
-const _sp0 = (!_q0m.has('fresh') && savedPos(curMap) && world.isWalkable(savedPos(curMap).x, savedPos(curMap).z)) ? savedPos(curMap) : world.start;
+const randStart = w => { const b = w.start; for (let i = 0; i < 24; i++) { const r = 3 + Math.random() * 3, t = Math.random() * 6.2832, x = b.x + Math.sin(t) * r, z = b.z + Math.cos(t) * r; if (w.isWalkable(x, z) && w.isWalkable(x - Math.sin(b.rot) * 0.9, z - Math.cos(b.rot) * 0.9)) return { x, z, rot: b.rot }; } return b; }; // v3.9f: 시작점 반경 3~6m 무작위(겹침 방지), 저장 위치 우선
+const _sp0 = (!_q0m.has('fresh') && savedPos(curMap) && world.isWalkable(savedPos(curMap).x, savedPos(curMap).z)) ? savedPos(curMap) : randStart(world);
 const start = new THREE.Vector3(_sp0.x, heightAt(_sp0.x, _sp0.z), _sp0.z); // 남서 입구 근처 보행로(OSM)
 guardian.root.position.copy(start);
 guardian.root.rotation.y = _sp0.rot; // 북동쪽(수로 방향)
@@ -204,6 +206,7 @@ document.querySelectorAll('.bottom-bar button').forEach(b => b.onclick = () => {
   if (a === 'sit') { dogAction = 'sit'; actionT = 3; say('앉았어요!'); }
   if (a === 'photo') takePhoto();
   if (a === 'rest') rest.on ? stopRest() : startRest();
+  if (SAY_OF[a]) netc.send({ t: 'say', k: SAY_OF[a] });
 });
 function takePhoto() {
   renderer.render(scene, camera);
@@ -259,13 +262,64 @@ function openDogModal() {
   openPanel('dogModal');
 }
 $('#dogOk').onclick = () => {
-  dogName = ($('#dogName').value.trim() || '바다').slice(0, 8); LS.set('bw.dogName', dogName); LS.set('bw.breed', pickBreed); if (pickBreed !== breedId) swapDog(pickBreed);
+  dogName = ($('#dogName').value.trim() || '바다').slice(0, 8); LS.set('bw.dogName', dogName); LS.set('bw.breed', pickBreed); if (pickBreed !== breedId) swapDog(pickBreed); if (_srvUrl) netc.connect(helloMsg());
   openPanel(null); say(`나 · ${dogName}`, 3);
 };
 
 // ---------- 서버 상태(현재 서버 없음: 오프라인 혼자 플레이로 정직하게 표시) ----------
 const net = initNetStatus($('#srv'));
 net.set(NetState.OFFLINE_SOLO);
+// ---------- 공용 서버(v3.9e): 주소가 없으면 혼자 플레이. 연결은 로딩과 분리(비동기, 3초 타임아웃), 실패해도 게임 계속 ----------
+const _srvUrl = (_q0m.get('server') || SERVER_URL || '').trim();
+const isPhone = matchMedia('(pointer:coarse)').matches || Math.min(innerWidth, innerHeight) < 600;
+const MAX_DETAIL = isPhone ? NET.maxDetailPhone : NET.maxDetailDesktop;
+const others = new Map(); // id → {name,breed,dog,buf:[[t,x,z,r,a]],label,sayT}
+const labelLayer = document.createElement('div'); labelLayer.id = 'otherLabels'; document.body.appendChild(labelLayer);
+const INTERP_MS = 150; // 보간 지연
+const dotGeo = new THREE.CircleGeometry(.35, 12).rotateX(-Math.PI / 2); // 멀리 있는(상세 표시 안 하는) 유저는 바닥 점으로 단순화
+function removeOther(id) { const o = others.get(id); if (!o) return; if (o.dog) scene.remove(o.dog.root); scene.remove(o.dot); o.label.remove(); others.delete(id); }
+let mapCounts = null;
+const netc = new NetClient(_srvUrl, NET, {
+  onStatus: (st, n, no) => net.set(st === 'online' ? NetState.ONLINE : st === 'connecting' ? NetState.CONNECTING : st === 'error' ? NetState.ERROR : NetState.OFFLINE_SOLO, n || 1, no),
+  onJoin: (id, name, breed) => { if (others.has(id)) return; const b = breedById(breed) ? breed : DEFAULT_BREED;
+    const dot = new THREE.Mesh(dotGeo, new THREE.MeshBasicMaterial({ color: breedById(b).color, transparent: true, opacity: .8 })); dot.visible = false; scene.add(dot);
+    const label = document.createElement('div'); label.className = 'olabel'; label.textContent = name; labelLayer.appendChild(label);
+    others.set(id, { name, breed: b, dog: null, dot, buf: [], label, sayT: 0 }); },
+  onState: (id, x, z, r, a) => { const o = others.get(id); if (!o) return; o.buf.push([performance.now(), x, z, r, a]); if (o.buf.length > 8) o.buf.shift(); },
+  onLeave: removeOther,
+  onSay: (id, k) => { const o = others.get(id); if (o && SAY_TEXT[k]) { o.label.textContent = o.name + ' · ' + SAY_TEXT[k]; o.label.classList.add('say'); o.sayT = 2.5; } },
+  onCounts: c => { mapCounts = c; if (mapMenu.classList.contains('open')) renderMapMenu(); },
+  onReset: () => { for (const id of [...others.keys()]) removeOther(id); },
+  onFix: (x, z) => { dog.root.position.set(x, heightAt(x, z), z); },
+  onFull: m => toast(m.next ? `서버 ${String(m.no).padStart(2, '0')}이 가득 차서 ${String(m.next).padStart(2, '0')}번으로 들어가요` : '이 맵의 모든 서버가 가득 찼어요 · 혼자 플레이'),
+});
+const helloMsg = () => ({ map: curMap, name: dogName, breed: breedId, x: +dog.root.position.x.toFixed(1), z: +dog.root.position.z.toFixed(1), r: dog.root.rotation.y });
+let sendAcc = 0;
+function netFrame(dt, dogState) {
+  if (!netc.online) { if (others.size) netc.cb.onReset(); return; }
+  if ((sendAcc += dt) >= 1 / NET.sendHz) { sendAcc = 0; const p = dog.root.position; netc.send({ t: 's', x: +p.x.toFixed(2), z: +p.z.toFixed(2), r: +dog.root.rotation.y.toFixed(2), a: Math.max(0, ANIM.indexOf(dogState)) }); }
+  const now = performance.now() - INTERP_MS, me = dog.root.position;
+  const arr = [...others.values()].filter(o => o.buf.length); for (const o of arr) { const l = o.buf[o.buf.length - 1]; o.d2 = (l[1] - me.x) ** 2 + (l[2] - me.z) ** 2; }
+  arr.sort((a, b) => a.d2 - b.d2);
+  arr.forEach((o, i) => {
+    const b = o.buf; let k = b.length - 1; while (k > 0 && b[k - 1][0] > now) k--; // now 를 감싸는 두 표본으로 보간
+    const p0 = b[Math.max(0, k - 1)], p1 = b[k], u = p1[0] === p0[0] ? 1 : Math.min(1, Math.max(0, (now - p0[0]) / (p1[0] - p0[0])));
+    const x = p0[1] + (p1[1] - p0[1]) * u, z = p0[2] + (p1[2] - p0[2]) * u; let dr = p1[3] - p0[3]; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); const r = p0[3] + dr * u;
+    const detail = i < MAX_DETAIL;
+    if (detail && !o.dog) { o.dog = makeDog(breedById(o.breed)); scene.add(o.dog.root); }
+    if (!detail && o.dog) { scene.remove(o.dog.root); o.dog = null; } // 상세 한도 밖: 모델 제거하고 점으로
+    const y = heightAt(x, z);
+    if (o.dog) { o.dog.root.position.set(x, y, z); o.dog.root.rotation.y = r; o.dog.animate(time, ANIM[p1[4]] || 'idle'); }
+    o.dot.visible = !detail; if (!detail) o.dot.position.set(x, y + .05, z);
+    if (o.sayT > 0 && (o.sayT -= dt) <= 0) { o.label.textContent = o.name; o.label.classList.remove('say'); }
+    if (detail && o.d2 < 900) { _lp.set(x, y + 1.05, z).project(camera); const on = _lp.z < 1; o.label.style.display = on ? '' : 'none'; if (on) o.label.style.transform = `translate(${(_lp.x * .5 + .5) * innerWidth}px,${(-_lp.y * .5 + .5) * innerHeight}px) translate(-50%,-100%)`; }
+    else o.label.style.display = 'none';
+  });
+}
+const _lp = new THREE.Vector3();
+setTimeout(() => netc.connect(helloMsg()), 0); // 로딩과 분리
+const SAY_OF = { pet: 'pet', treat: 'treat', photo: 'photo', rest: 'rest', sit: 'woof' };
+window.__net = { netc, others, get detail() { return MAX_DETAIL; } };
 
 // ---------- 관리자 모드(숨김) ----------
 // 주의: 클라이언트 코드라 진짜 보안이 아님. 누구나 소스를 보면 켤 수 있음. 시간 표시를 바꾸는 것도 그 사용자 화면에만 적용됨.
@@ -351,6 +405,7 @@ function frame() {
   if (actionT > 0) { actionT -= dt; if (actionT <= 0) dogAction = null; }
   if (dogState === 'sit' && walking) { dogAction = null; }
   dog.animate(time, dogState);
+  netFrame(dt, dogState);
   for (const d of breedsGrid) if (d.root.visible) d.animate(time, "idle");
   updateLeash();
   // 효과
@@ -406,19 +461,19 @@ async function switchMap(id) {
     if (rest.on) stopRest();
     const w = await getWorld(id, scene);
     world = w; curMap = id; setActive(w); LSm.set('bw.map', id); setTitle();
-    const sp = savedPos(id); const s0 = sp && w.isWalkable(sp.x, sp.z) ? sp : w.start;
+    const sp = savedPos(id); const s0 = sp && w.isWalkable(sp.x, sp.z) ? sp : randStart(w);
     guardian.root.position.set(s0.x, heightAt(s0.x, s0.z), s0.z); guardian.root.rotation.y = s0.rot;
     dog.root.position.set(s0.x - Math.sin(s0.rot) * .9, heightAt(s0.x, s0.z), s0.z - Math.cos(s0.rot) * .9); dog.root.rotation.y = s0.rot;
     camTarget.copy(guardian.root.position); yaw = s0.rot - Math.PI; moveTarget = null; if (marker) marker.visible = false;
     applyTime(cur, { scene, hemi, sun, renderer, world }); // 시간 위상·사운드는 그대로 이어짐
     sound.setNear(world.waterNear(s0.x, s0.z));
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    toast(`${mapById(id).name}에 도착했어요`);
+    toast(`${mapById(id).name}에 도착했어요`); netc.closed = false; netc.cb.onReset(); netc.connect(helloMsg());
   } catch (e) { console.warn('맵 이동 실패', e); fade.querySelector('small').textContent = '불러오기 실패'; await new Promise(r => setTimeout(r, 900)); }
   fade.classList.remove('on'); switching = false; return true;
 }
 const mapMenu = $('#mapMenu');
-function renderMapMenu() { mapMenu.querySelector('.list').innerHTML = MAPS.map(m => `<button data-map="${m.id}" class="${m.id === curMap ? 'cur' : ''}"><span class="no">${m.sub}</span><span class="nm">${m.name}<small>${m.desc}</small></span>${m.id === curMap ? '<em>현재</em>' : ''}</button>`).join(''); }
+function renderMapMenu() { mapMenu.querySelector('.list').innerHTML = MAPS.map(m => `<button data-map="${m.id}" class="${m.id === curMap ? 'cur' : ''}"><span class="no">${m.sub}</span><span class="nm">${m.name}<small>${m.desc}</small></span>${mapCounts ? `<i class="cnt">${mapCounts[m.id] || 0}명</i>` : ''}${m.id === curMap ? '<em>현재</em>' : ''}</button>`).join(''); }
 function openMapMenu() { renderMapMenu(); mapMenu.classList.add('open'); }
 function closeMapMenu() { mapMenu.classList.remove('open'); }
 $('#srv').addEventListener('click', e => { e.stopPropagation(); mapMenu.classList.contains('open') ? closeMapMenu() : openMapMenu(); });

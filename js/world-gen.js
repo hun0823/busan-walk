@@ -5,7 +5,7 @@
 // 연출(데이터에 없음): 건물 높이(층수 없는 경우)·색, 감천 파스텔 색, 용궁사 전통 지붕 형태, 숲 나무 배치, 가로등, 광안대교 주탑·케이블 위치와 높이·조명, 하늘·별·달.
 // 다른 서비스(산사 등)의 코드·모델은 사용하지 않음. 모두 Three.js 기본 도형·캔버스 절차 생성.
 import * as THREE from 'three';
-import { addV39, templeRoof } from './v39.js?v=39d';
+import { addV39, templeRoof } from './v39.js?v=39f';
 const S = 0.3;
 
 export const MAP_CFG = {
