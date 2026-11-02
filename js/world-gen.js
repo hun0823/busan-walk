@@ -5,7 +5,7 @@
 // 연출(데이터에 없음): 건물 높이(층수 없는 경우)·색, 감천 파스텔 색, 용궁사 전통 지붕 형태, 숲 나무 배치, 가로등, 광안대교 주탑·케이블 위치와 높이·조명, 하늘·별·달.
 // 다른 서비스(산사 등)의 코드·모델은 사용하지 않음. 모두 Three.js 기본 도형·캔버스 절차 생성.
 import * as THREE from 'three';
-import { addV39, templeRoof } from './v39.js';
+import { addV39, templeRoof } from './v39.js?v=39d';
 const S = 0.3;
 
 export const MAP_CFG = {
@@ -29,6 +29,8 @@ const rng = seed => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Mat
 const hash = (x, y) => { const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; return s - Math.floor(s); };
 
 export async function buildGenWorld(id, scene) {
+  const step = async t => { if (window.__step) window.__step(t); await new Promise(r => setTimeout(r, 16)); }; // v3.9d: 단계 표시 + 화면 갱신 기회
+  await step('맵 데이터 받는 중');
   const occluders = []; // 카메라 가림 방지용(건물)
   let D; for (let k = 0; ; k++) { try { D = await (await fetch(`data/${id}.json`)).json(); break; } catch (e) { if (k >= 3) throw e; await new Promise(r => setTimeout(r, 400 * (k + 1))); } } // 느린 망 재시도
   const C = MAP_CFG[id];
@@ -53,6 +55,7 @@ export async function buildGenWorld(id, scene) {
   const bump = pk ? (mx, my) => C.peak.a * Math.exp(-((mx - pk.x) ** 2 + (my - pk.y) ** 2) / C.peak.r ** 2) : () => 0;
   const rawH = (x, z) => Math.max(D.coast ? .15 : 0, (elevM(x / S, -z / S) + bump(x / S, -z / S) - base) * C.vs);
 
+  await step('걷기 영역 계산');
   // ---- 캔버스 래스터: 걷기(R px/단위), 육지 마스크 ----
   const R = 2, GW = Math.ceil(WX * R), GH = Math.ceil(WZ * R);
   const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
@@ -85,6 +88,7 @@ export async function buildGenWorld(id, scene) {
   const isLand = (x, z) => { const c = cell(x, z); return c >= 0 && landPx[c] > 127; };
   const heightAt = (x, z) => rawH(x, z);
 
+  await step('지면 그리는 중');
   // ---- 지면 텍스처(캔버스) ----
   const TK = Math.min(2048 / WX, 2048 / WZ), TW = Math.round(WX * TK), TH = Math.round(WZ * TK);
   const tc = mk(TW, TH), tg = tc.getContext('2d'), tpnt = painter(tg, TK);
@@ -102,6 +106,7 @@ export async function buildGenWorld(id, scene) {
   for (const p of D.paths.filter(p => p.k === 'steps')) tpnt.line(p.p, pw(p), '#8a7f70', [.25, .45]); // 계단 디딤 줄무늬
   const groundTex = new THREE.CanvasTexture(tc); groundTex.colorSpace = THREE.SRGBColorSpace; groundTex.anisotropy = 8;
 
+  await step('지형 만드는 중');
   // ---- 지형 메시 ----
   const seg = Math.min(260, Math.round(WX / 1.6)), segZ = Math.round(seg * WZ / WX);
   const tgeo = new THREE.PlaneGeometry(WX, WZ, seg, segZ); tgeo.rotateX(-Math.PI / 2); tgeo.translate((B.x0 + B.x1) / 2, 0, (B.z0 + B.z1) / 2);
@@ -135,6 +140,7 @@ export async function buildGenWorld(id, scene) {
     sea.position.set((B.x0 + B.x1) / 2, -.35, (B.z0 + B.z1) / 2); group.add(sea);
   }
 
+  await step('건물 세우는 중');
   // ---- 건물(병합 1메시, 정점색) ----
   const pos = [], nor = [], col = []; const tmpC = new THREE.Color(), roofC = new THREE.Color();
   const PAL = C.pastel ? ['#f6b3b8', '#ffd59a', '#a8d8f0', '#b8e2b0', '#f7e48f', '#c9b8ef', '#ff9e7a', '#8fd3d0', '#f4a6c9', '#ffcf8a']
@@ -185,6 +191,7 @@ export async function buildGenWorld(id, scene) {
     const m = new THREE.Mesh(g, bldMat); m.userData.mapKind = 'bld'; m.castShadow = true; m.receiveShadow = true; group.add(m); 
   }
 
+  await step('나무 심는 중');
   // ---- 나무: OSM 나무 점 + 숲/녹지 면 + (숲 맵) 빈 땅에 배치(연출) ----
   const treePts = D.trees.map(W); const r1 = rng(11);
   const woodC = mk(GW, GH), og = woodC.getContext('2d'), op = painter(og, R);
@@ -222,6 +229,7 @@ export async function buildGenWorld(id, scene) {
   const clearLampsNear = (x, z, r) => { let n = 0; const dx = Math.sin(r), dz = Math.cos(r); lampPts.forEach(([lx, lz], i) => { const a = (lx - x) * dx + (lz - z) * dz, l = Math.abs((lx - x) * dz - (lz - z) * dx); if (a > -9 && a < 7 && l < 5) { o3.position.set(0, -999, 0); o3.scale.set(0, 0, 0); o3.updateMatrix(); posts.setMatrixAt(i, o3.matrix); heads.setMatrixAt(i, o3.matrix); n++; } }); posts.instanceMatrix.needsUpdate = heads.instanceMatrix.needsUpdate = true; return n; }; // v3.9: 시작 화면 카메라 앞을 사선으로 가로지르는 가로등 정리
   posts.count = heads.count = lampPts.length; posts.frustumCulled = heads.frustumCulled = false; group.add(posts, heads);
 
+  await step('장소 이름');
   // ---- 지점 라벨 ----
   const labels = [];
   function label(text, x, z, big) {
@@ -265,6 +273,7 @@ export async function buildGenWorld(id, scene) {
     bridgeInfo = { mid, dir: [dx, dz], HALF, SIDE: 200 * S, deckBase, towerH, wHalf, deckY, beach: [bcx, bcz] };
   }
 
+  await step('하늘');
   // ---- 하늘·별·달 (직접 작성 셰이더) ----
   const skyU = { top: { value: new THREE.Color() }, bot: { value: new THREE.Color() }, sunDir: { value: new THREE.Vector3(0, 1, 0) }, sunVis: { value: 1 } };
   const sky = new THREE.Mesh(new THREE.SphereGeometry(1500, 32, 16), new THREE.ShaderMaterial({ uniforms: skyU, side: THREE.BackSide, depthWrite: false, fog: false,
@@ -293,9 +302,11 @@ export async function buildGenWorld(id, scene) {
     stars.material.opacity = starBase * (.8 + .2 * Math.sin(t * 2.3));
     if (bridgeMats.length && curT && curT.lamp > 1) { ledH = (t * .03) % 1; bridgeMats[0].emissive.setHSL(.5 + .2 * Math.sin(t * .2), .8, .55); } else if (bridgeMats.length) bridgeMats[0].emissive.set(0x7fd8ff);
   }
+  await step('해변·야경 꾸미는 중');
   const v39 = addV39({ id, D, C, group, W, B, rawH, isLand, isWalkable, painter, tc, tg, TK, groundTex, sea, bridge: bridgeInfo, bridgeMats, hash });
   const waterNear = (x, z) => { if (!D.coast) return 0; for (const [r, v] of [[3, .9], [10, .7], [22, .45], [40, .25]]) for (let a = 0; a < 8; a++) if (!isLand(x + Math.cos(a * .785) * r, z + Math.sin(a * .785) * r)) return v; return 0; };
 
+  await step('시작 위치');
   // ---- 시작 지점·방향, 테스트 목표 ----
   function nearestWalk(x, z, maxR = 120) { if (isWalkable(x, z)) return [x, z]; for (let r = .5; r < maxR; r += .5) for (let a = 0; a < 32; a++) { const px = x + Math.cos(a / 32 * 6.283) * r, pz = z + Math.sin(a / 32 * 6.283) * r; if (isWalkable(px, pz)) return [px, pz]; } return [x, z]; }
   const poiW = n => { const p = D.pois.find(p => p.n === n); return p ? W([p.x, p.y]) : null; };

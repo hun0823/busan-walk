@@ -65,7 +65,10 @@ export function addV39(X) {
     layer(seaM, 70, '#e6cf9c', beachM, 'destination-in', .75);
     // 결 노이즈·바람 물결 무늬(해변 안쪽만)
     { const c = mkT(TW, TH), g = c.getContext('2d'); const r = rngF(91);
-      for (let k = 0; k < TW * TH / 9; k++) { const v = r(); g.fillStyle = v < .5 ? `rgba(120,96,60,${.08 + r() * .1})` : `rgba(255,250,235,${.1 + r() * .14})`; g.fillRect(r() * TW, r() * TH, 1, 1); }
+      { const im = g.createImageData(TW, TH), d = im.data; // v3.9d: 모래 결 점을 ImageData로 한 번에(느린 기기에서 fillRect 37만 번 → 수십 ms)
+        for (let k = 0, n = TW * TH / 9 | 0; k < n; k++) { const v = r(), al = v < .5 ? .08 + r() * .1 : .1 + r() * .14, i = ((r() * TH | 0) * TW + (r() * TW | 0)) * 4;
+          if (v < .5) { d[i] = 120; d[i + 1] = 96; d[i + 2] = 60; } else { d[i] = 255; d[i + 1] = 250; d[i + 2] = 235; } d[i + 3] = al * 255; }
+        g.putImageData(im, 0, 0); }
       g.lineWidth = 1; for (let k = 0; k < TW * TH / 900; k++) { const x = r() * TW, y = r() * TH, l = 6 + r() * 14; g.strokeStyle = `rgba(160,130,85,${.12 + r() * .12})`; g.beginPath(); g.moveTo(x, y); g.bezierCurveTo(x + l * .3, y - 2, x + l * .7, y + 2, x + l, y); g.stroke(); }
       for (let k = 0; k < 160; k++) { const x = r() * TW, y = r() * TH; g.fillStyle = `rgba(110,90,70,${.12 + r() * .15})`; g.beginPath(); g.ellipse(x, y, 2 + r() * 3, 1.2 + r() * 2, r() * 3, 0, 7); g.fill(); } // 발자국 자국 느낌(연출)
       g.globalCompositeOperation = 'destination-in'; g.drawImage(beachM, 0, 0); tg.drawImage(c, 0, 0); }

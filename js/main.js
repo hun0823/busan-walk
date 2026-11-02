@@ -2,19 +2,19 @@
 // 모든 모델/텍스처/사운드는 Three.js 기본 도형과 절차 생성으로 직접 제작. (외부 에셋 없음)
 // 월드 배치는 실제 지도가 아니라 상상 구성(연출)이다. 요소 목록만 디자이너 전달 자료 기준.
 import * as THREE from 'three';
-import { S as MAP_SCALE } from './world.js';
-import { MAPS, mapById, getWorld, setActive, isWalkable, heightAt } from './maps.js';
-import { makeGuardian, makeDog } from './characters.js';
-import { initMapView } from './mapview.js';
-import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js';
-import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js';
-import { NetState, initNetStatus } from './net.js';
-import { makeMat } from './mat.js';
-import { BgSound } from './sound.js';
+import { S as MAP_SCALE } from './world.js?v=39d';
+import { MAPS, mapById, getWorld, setActive, isWalkable, heightAt } from './maps.js?v=39d';
+import { makeGuardian, makeDog } from './characters.js?v=39d';
+import { initMapView } from './mapview.js?v=39d';
+import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js?v=39d';
+import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js?v=39d';
+import { NetState, initNetStatus } from './net.js?v=39d';
+import { makeMat } from './mat.js?v=39d';
+import { BgSound } from './sound.js?v=39d';
 
 const $ = s => document.querySelector(s);
-const setLoad = p => { $('#loadbar').style.width = p + '%'; };
-setLoad(10);
+const setLoad = (p, t) => { $('#loadbar').style.width = p + '%'; if (t && window.__step) window.__step(t); };
+setLoad(10, '화면 준비 중');
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -37,18 +37,20 @@ sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 25, bottom: -25, near: 1, far: 120 });
 scene.add(hemi, sun, sun.target);
 
-setLoad(30);
+setLoad(30, '맵 불러오는 중');
 const _q0m = new URLSearchParams(location.search);
 const LSm = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 let curMap = mapById(_q0m.get('map')) ? _q0m.get('map') : mapById(LSm.get('bw.map')) ? LSm.get('bw.map') : 'bukhang';
-let world; try { world = await getWorld(curMap, scene); } catch (e) { // v3.9c: 맵 생성 실패 시 로딩 화면에 짧게 알리고 북항으로 진입
+if (_q0m.has('reset')) { try { for (const k of Object.keys(localStorage)) if (k === 'bw.map' || k.startsWith('bw.pos.')) localStorage.removeItem(k); } catch {} curMap = mapById(_q0m.get('map')) ? _q0m.get('map') : 'bukhang'; } // v3.9d: ?reset=1 저장 맵·위치 초기화
+const _withTO = (p, ms) => Promise.race([p, new Promise((_, rj) => setTimeout(() => rj(new Error(ms / 1000 + '초 안에 맵을 만들지 못함')), ms))]);
+let world; try { world = await _withTO(getWorld(curMap, scene), curMap === 'bukhang' ? 60000 : 15000); } catch (e) { // v3.9c: 맵 생성 실패 시 로딩 화면에 짧게 알리고 북항으로 진입
   console.warn('map load failed', curMap, e); window.__loadErr && window.__loadErr('맵 불러오기 실패(' + curMap + '): ' + (e && e.message || e) + ' · 북항으로 들어갑니다', true);
   LSm.set('bw.map', 'bukhang'); curMap = 'bukhang'; world = await getWorld(curMap, scene); }
 setActive(world);
 const savedPos = id => { const v = (LSm.get('bw.pos.' + id) || '').split(',').map(Number); return v.length === 3 && v.every(Number.isFinite) ? { x: v[0], z: v[1], rot: v[2] } : null; };
 const sound = new BgSound(); // 배경음(직접 합성) — 첫 터치/클릭 후 시작, 음소거는 localStorage bw.mute
 let nearAcc = 0;
-setLoad(70);
+setLoad(70, '캐릭터·소리 준비 중');
 
 const guardian = makeGuardian(); scene.add(guardian.root);
 // 강아지 이름·견종: localStorage 저장
@@ -459,6 +461,6 @@ async function renderTop(id, R) { // R: 월드 좌표 사각형 {x0,x1,z0,z1}
 const mapView = initMapView({ renderTop, maps: MAPS, getCur: () => curMap, getMe: () => ({ x: guardian.root.position.x, z: guardian.root.position.z, rot: guardian.root.rotation.y }) });
 window.__game = { mapView, openMapMenu, switchMap,  sound, breedsGrid, lineup, setTime: k => setTime(k, true), say, startRest, stopRest, openDogModal, swapDog, get rest() { return rest.on; }, test: { setPos: (x, z, r) => { guardian.root.position.set(x, heightAt(x, z), z); dog.root.position.set(x + .8, heightAt(x + .8, z + .8), z + .8); if (r !== undefined) yaw = r; }, setYaw: v => { yaw = v; }, setCam: (y, p, d) => { yaw = y; pitch = p; dist = d; }, getCam: () => [yaw, pitch, dist], get dog() { return dog.root; }, guardian: guardian.root, moveChar, get isWalkable() { return isWalkable; }, get heightAt() { return heightAt; }, get world() { return world; }, switchMap: id => switchMap(id), get map() { return curMap; } } }; // test: tools/walktest.mjs 용
 
-setLoad(100);
+setLoad(100, '들어가는 중');
 frame();
 setTimeout(() => { $('#loading').style.opacity = 0; setTimeout(() => $('#loading').remove(), 700); say(`나 · ${dogName}`, 3); if (!LS.get('bw.breed') && !_q0.has('nomodal')) openDogModal(); }, 400);
