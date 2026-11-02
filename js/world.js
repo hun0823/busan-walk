@@ -299,8 +299,8 @@ export function buildWorld(scene) {
     }
   }
   const NT = Math.min(treePts.length, 180); // 나무 수 축소(연출)
-  const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(.16, .26, 2, 8).translate(0, 1, 0), M(0x7a5a3a), NT);
-  const leaves = new THREE.InstancedMesh(new THREE.SphereGeometry(1.5, 14, 10), M(0xffffff, { roughness: .95 }), NT * 2);
+  const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(.16, .26, 2, 8).translate(0, 1, 0), M(0x7a5a3a), NT); trunks.userData.mapKind = 'hide';
+  const leaves = new THREE.InstancedMesh(new THREE.SphereGeometry(1.5, 14, 10), M(0xffffff, { roughness: .95 }), NT * 2); leaves.userData.mapKind = 'tree';
   const leafCols = [0x6f8f55, 0x86985c, 0x5d7d52, 0x9aa268].map(c => new THREE.Color(c));
   for (let i = 0; i < NT; i++) {
     const [x, z] = treePts[i], s = .5 + rnd() * 1.0; const lc = leafCols[Math.floor(rnd() * 4)]; leaves.setColorAt(i * 2, lc); leaves.setColorAt(i * 2 + 1, lc);
@@ -311,13 +311,13 @@ export function buildWorld(scene) {
   trunks.castShadow = leaves.castShadow = true; scene.add(trunks, leaves);
   // 낮은 관목(연출)
   const NS = Math.min(shrubPts.length, 400);
-  const shrubs = new THREE.InstancedMesh(new THREE.SphereGeometry(.7, 12, 8), M(0xffffff, { roughness: 1 }), NS);
+  const shrubs = new THREE.InstancedMesh(new THREE.SphereGeometry(.7, 12, 8), M(0xffffff, { roughness: 1 }), NS); shrubs.userData.mapKind = 'tree';
   for (let i = 0; i < NS; i++) { const [x, z] = shrubPts[i], s = .6 + rnd() * .7; mtx.makeScale(s * 1.3, s * .6, s).setPosition(x, .2 * s, z); shrubs.setMatrixAt(i, mtx); shrubs.setColorAt(i, leafCols[Math.floor(rnd() * 4)].clone().multiplyScalar(.85)); }
   shrubs.castShadow = true; scene.add(shrubs);
   // 얇은 풀 포기(연출): 잔디가 평평해 보이지 않게 — 삼각 잎 3장 묶음을 흩뿌림
   const bladeG = new THREE.BufferGeometry(); { const v = []; for (let k = 0; k < 3; k++) { const a = k * 2.1, ca = Math.cos(a) * .06, sa = Math.sin(a) * .06, tx = Math.cos(a + .6) * .08, tz = Math.sin(a + .6) * .08; v.push(-ca, 0, -sa, ca, 0, sa, tx, .28 + k * .04, tz); } bladeG.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); bladeG.computeVertexNormals(); }
   const bladePts = []; { const pr = DATA.parkGround.map(p => p[0].map(W)); const xs = parkPts.map(p => p[0]), zs = parkPts.map(p => p[1]); for (let i = 0; i < 40000 && bladePts.length < 9000; i++) { const x = B.x0 + rnd() * (B.x1 - B.x0), z = B.z0 + rnd() * (B.z1 - B.z0); if (isWalkable(x, z) && !onBridge(x, z) && pr.some(r => inRing(r, x, z))) bladePts.push([x, z]); } }
-  const blades = new THREE.InstancedMesh(bladeG, M(0x7d9a52, { side: THREE.DoubleSide, roughness: 1 }), bladePts.length);
+  const blades = new THREE.InstancedMesh(bladeG, M(0x7d9a52, { side: THREE.DoubleSide, roughness: 1 }), bladePts.length); blades.userData.mapKind = 'hide';
   bladePts.forEach(([x, z], i) => { const s2 = .7 + rnd() * .8; mtx.makeRotationY(rnd() * 6.28).scale(new THREE.Vector3(s2, s2, s2)).setPosition(x, 0, z); blades.setMatrixAt(i, mtx); blades.setColorAt(i, new THREE.Color().setHSL(.22 + rnd() * .06, .3, .3 + rnd() * .15)); });
   scene.add(blades);
   // 야생화(연출): OSM 잔디 원 구역 안에 점점이
@@ -325,7 +325,7 @@ export function buildWorld(scene) {
   for (const poly of DATA.green) { const ring = poly[0].map(W); const xs = ring.map(p => p[0]), zs = ring.map(p => p[1]); const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
     const n = Math.min(500, (x1 - x0) * (z1 - z0) * .08); for (let i = 0; i < n; i++) { const x = x0 + rnd() * (x1 - x0), z = z0 + rnd() * (z1 - z0); if (inRing(ring, x, z) && isWalkable(x, z)) flowerPts.push([x, z]); } }
   const NF = Math.min(flowerPts.length, 4000);
-  const flowers = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(.09, 0), new THREE.MeshStandardMaterial({ roughness: 1 }), NF);
+  const flowers = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(.09, 0), new THREE.MeshStandardMaterial({ roughness: 1 }), NF); flowers.userData.mapKind = 'hide';
   for (let i = 0; i < NF; i++) { const [x, z] = flowerPts[i]; mtx.makeTranslation(x, .12 + rnd() * .1, z); flowers.setMatrixAt(i, mtx); flowers.setColorAt(i, fcols[Math.floor(rnd() * 5)]); }
   scene.add(flowers);
 
@@ -343,7 +343,7 @@ export function buildWorld(scene) {
   }
   plumeData.length = Math.min(plumeData.length, 2500); tuftPts.length = Math.min(tuftPts.length, 500);
   const plumes = new THREE.InstancedMesh(plumeGeo, new THREE.MeshStandardMaterial({ color: 0xf3e6c8, roughness: 1, transparent: true, opacity: .85, emissive: 0x3a2a18 }), plumeData.length), stems = new THREE.InstancedMesh(stemGeo, M(0xb8a878), plumeData.length);
-  const tufts = new THREE.InstancedMesh(tuftGeo, M(0x8f9468, { side: THREE.DoubleSide }), tuftPts.length);
+  const tufts = new THREE.InstancedMesh(tuftGeo, M(0x8f9468, { side: THREE.DoubleSide }), tuftPts.length); tufts.userData.mapKind = 'hide';
   tuftPts.forEach(([x, z], i) => { mtx.makeScale(1, .8 + rnd() * .5, 1).setPosition(x, 0, z); tufts.setMatrixAt(i, mtx); });
   scene.add(plumes, stems, tufts);
   const q = new THREE.Quaternion(), e3 = new THREE.Euler(), sc = new THREE.Vector3(1, 1, 1), pv = new THREE.Vector3();
@@ -362,8 +362,8 @@ export function buildWorld(scene) {
   const NL = Math.min(lampPts.length, 300);
   const lampMat = new THREE.MeshStandardMaterial({ color: 0xfff0d0, emissive: 0xffb860, emissiveIntensity: 1 }); emissives.lamp.push(lampMat);
   const poleM = M(0x4a3a30, { roughness: .6 });
-  const poles = new THREE.InstancedMesh(new THREE.CylinderGeometry(.08, .12, 2.6, 8).translate(0, 1.3, 0), poleM, NL);
-  const lans = new THREE.InstancedMesh(new THREE.CapsuleGeometry(.22, .3, 6, 12).translate(0, 2.75, 0), lampMat, NL);
+  const poles = new THREE.InstancedMesh(new THREE.CylinderGeometry(.08, .12, 2.6, 8).translate(0, 1.3, 0), poleM, NL); poles.userData.mapKind = 'hide';
+  const lans = new THREE.InstancedMesh(new THREE.CapsuleGeometry(.22, .3, 6, 12).translate(0, 2.75, 0), lampMat, NL); lans.userData.mapKind = 'hide';
   const caps = new THREE.InstancedMesh(new THREE.ConeGeometry(.35, .25, 12).translate(0, 3.15, 0), poleM, NL);
   for (let i = 0; i < NL; i++) { const [x, z] = lampPts[i]; mtx.makeTranslation(x, 0, z); poles.setMatrixAt(i, mtx); lans.setMatrixAt(i, mtx); caps.setMatrixAt(i, mtx); lamps.push(new THREE.Vector3(x, 2.75, z)); }
   poles.castShadow = caps.castShadow = true; scene.add(poles, lans, caps);

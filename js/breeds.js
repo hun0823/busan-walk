@@ -1,5 +1,5 @@
 // 견종 데이터(데이터 주도). 견종 추가 = 이 배열에 객체 하나 추가. 모델은 characters.js makeDog(breed)가 파라미터로 생성.
-// 출처: 디자이너 표 breeds.md (AI 생성 시안 기반, 색은 추정값) → 연출. 실제 견종 표준과 다를 수 있음.
+// 출처: 디자이너 표 디자이너 시안 폴더(dogs/)breeds.md (AI 생성 시안 기반, 색은 추정값) → 연출. 실제 견종 표준과 다를 수 있음.
 // color: 주 털색, color2: 보조색, color3: 셋째 색(안장 등)
 // 무늬 플래그: face(주둥이·볼 보조색) chest(가슴 보조색) mask(주둥이 진한 보조색) earCol(귀 보조색) head(머리 전체 보조색) saddle(등 안장 color3) tailTip(꼬리 끝 색)
 // ear: drop(처짐)|erect(선 삼각)|bat(큰 박쥐)|button(앞으로 접힌 단추)|semi(반쯤 선, 끝 접힘)|big(아주 큰 선 귀), earSize 배율

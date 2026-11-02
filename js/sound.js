@@ -50,6 +50,7 @@ export class BgSound {
   setMuted(m) { this.muted = m; if (!m) this.start(); else this.fade(); }
   fade() { if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : .18, this.ctx.currentTime, .8); }
   setPhase(p) { if (p === this.phase) return; this.phase = p; if (this.ctx) this.tone.frequency.setTargetAtTime((PHASE[p] || PHASE.morning).lp, this.ctx.currentTime, 2); }
+  chime() { if (!this.ctx || this.muted) return; const t = this.ctx.currentTime + .05; [76, 79, 83, 88, 83].forEach((m, i) => this.note(t + i * .28, m, 1.6, .5)); } // v3.9 드론쇼 시작 부드러운 차임(직접 합성)
   setNear(v) { this.near = v; if (this.ctx) this.water.gain.setTargetAtTime(.12 + .6 * v, this.ctx.currentTime, 1); } // 수로 가까울수록 물소리 큼
   get status() { return { started: this.started, state: this.ctx?.state || 'none', muted: this.muted, phase: this.phase, near: this.near }; }
 }

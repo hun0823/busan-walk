@@ -5,6 +5,7 @@
 // 연출(데이터에 없음): 건물 높이(층수 없는 경우)·색, 감천 파스텔 색, 용궁사 전통 지붕 형태, 숲 나무 배치, 가로등, 광안대교 주탑·케이블 위치와 높이·조명, 하늘·별·달.
 // 다른 서비스(산사 등)의 코드·모델은 사용하지 않음. 모두 Three.js 기본 도형·캔버스 절차 생성.
 import * as THREE from 'three';
+import { addV39, templeRoof } from './v39.js';
 const S = 0.3;
 
 export const MAP_CFG = {
@@ -12,11 +13,11 @@ export const MAP_CFG = {
     start: { beach: true }, face: 'bridge', goal: 'beachEnd',
     extraLabels: d => { const c = centroidBig(d.beach); return c ? [{ n: '광안리해수욕장', x: c[0], y: c[1] }] : []; },
     poiFilter: p => p.n && p.k === 'attraction', note: '광안대교 선형·해변·건물 윤곽은 OSM. 주탑·케이블 위치·높이·조명은 연출' },
-  hwangnyeong: { name: '황령산', vs: .1, forest: true, fogMul: 1.3,
+  hwangnyeong: { name: '황령산', vs: .13, peak: { n: '황령산', r: 95, a: 38 }, forest: true, fogMul: 1.3,
     start: { poi: '황령산 봉수대', off: 26 }, face: 'poi:황령산 봉수대', see: 'poi:황령산 봉수대', goal: 'poi:사자봉 조망 지점',
-    poiFilter: p => p.n && ['peak', 'viewpoint', 'temple'].includes(p.k), note: '등산로·봉우리·전망 지점은 OSM, 고도는 DEM(수직 0.1배 단순화). 숲 나무 배치는 연출' },
+    poiFilter: p => p.n && ['peak', 'viewpoint', 'temple'].includes(p.k), note: '등산로·봉우리·전망 지점은 OSM, 고도는 DEM(수직 0.13배 + 정상부 봉우리 강조(연출)). 숲 나무 배치는 연출' },
   yonggungsa: { name: '용궁사', vs: .2, base: 0, temple: true, fogMul: 1,
-    start: { poi: '해동용궁사', off: 18 }, face: 'poi:해동용궁사', see: 'bigbld', goal: 'poi:해수관음상',
+    start: { poi: '해동용궁사', off: 18 }, face: 'poi:해동용궁사', see: 'poi:해동용궁사', vantage: { poi: '해수관음상', dx: 22, dz: 32, look: '해동용궁사', fixed: true, cam: 8.5 }, goal: 'poi:해수관음상',
     poiFilter: p => p.n && ['temple', 'viewpoint'].includes(p.k) || ['해수관음상', '득남불'].includes(p.n), note: '해안선·계단·건물 윤곽은 OSM. 지붕 형태·색은 연출' },
   gamcheon: { name: '감천문화마을', vs: .14, pastel: true, forestWood: true, fogMul: 1.1,
     start: { poi: '감천문화마을', off: 6, vista: 55 }, face: 'downhill', goal: 'poi:어린왕자상',
@@ -48,7 +49,9 @@ export async function buildGenWorld(id, scene) {
     for (let k = -1; k <= 2; k++) r.push(cr(ev(i - 1, j + k), ev(i, j + k), ev(i + 1, j + k), ev(i + 2, j + k), fu));
     return cr(r[0], r[1], r[2], r[3], fv);
   }
-  const rawH = (x, z) => Math.max(D.coast ? .15 : 0, (elevM(x / S, -z / S) - base) * C.vs);
+  const pk = C.peak ? D.pois.find(p => p.n === C.peak.n && p.k === 'peak') : null; // v3.9: 정상부를 봉우리답게(가우시안 융기, 연출)
+  const bump = pk ? (mx, my) => C.peak.a * Math.exp(-((mx - pk.x) ** 2 + (my - pk.y) ** 2) / C.peak.r ** 2) : () => 0;
+  const rawH = (x, z) => Math.max(D.coast ? .15 : 0, (elevM(x / S, -z / S) + bump(x / S, -z / S) - base) * C.vs);
 
   // ---- 캔버스 래스터: 걷기(R px/단위), 육지 마스크 ----
   const R = 2, GW = Math.ceil(WX * R), GH = Math.ceil(WZ * R);
@@ -104,10 +107,10 @@ export async function buildGenWorld(id, scene) {
   const tgeo = new THREE.PlaneGeometry(WX, WZ, seg, segZ); tgeo.rotateX(-Math.PI / 2); tgeo.translate((B.x0 + B.x1) / 2, 0, (B.z0 + B.z1) / 2);
   const tpos = tgeo.attributes.position;
   // 해안: 육지 마스크를 흐리게 해 물가로 완만히 내려가게
-  let blurPx = null; if (D.coast) { const bc = mk(GW, GH), bg = bc.getContext('2d'); bg.filter = 'blur(3px)'; bg.drawImage(landC, 0, 0); blurPx = bg.getImageData(0, 0, GW, GH).data; }
+  let blurPx = null, blurW = null; if (D.coast) { const bc = mk(GW, GH), bg = bc.getContext('2d'); bg.filter = 'blur(3px)'; bg.drawImage(landC, 0, 0); blurPx = bg.getImageData(0, 0, GW, GH).data; bg.clearRect(0, 0, GW, GH); bg.filter = 'blur(22px)'; bg.drawImage(landC, 0, 0); blurW = bg.getImageData(0, 0, GW, GH).data; }
   for (let i = 0; i < tpos.count; i++) {
     const x = tpos.getX(i), z = tpos.getZ(i); let y = rawH(x, z);
-    if (blurPx) { const c = cell(Math.min(B.x1 - .01, x), Math.min(B.z1 - .01, z)); const m = c >= 0 ? blurPx[c] / 255 : 0; const m2 = Math.min(1, m * 1.6); y = -3 + (y + 3) * m2; }
+    if (blurPx) { const c = cell(Math.min(B.x1 - .01, x), Math.min(B.z1 - .01, z)); const m = c >= 0 ? blurPx[c] / 255 : 0; const m2 = Math.min(1, m * 1.6); y = -3 + (y + 3) * m2; if (c >= 0 && landPx[c] < 128) { const mw = blurW[c] / 255; y = Math.max(y, Math.min(-.55, -3 + 2.6 * Math.min(1, mw * 2.4))); } } // v3.9 완만한 얕은 바닥(투명 물 아래 보이게)
     tpos.setY(i, y);
   }
   tgeo.computeVertexNormals();
@@ -160,10 +163,15 @@ export async function buildGenWorld(id, scene) {
     const H = hm * S * 1.25, y0 = hmin - .4, top = hmax + H;
     const wall = PAL[Math.floor(hh * 97) % PAL.length], roof = ROOF[Math.floor(hh * 53) % ROOF.length];
     if (C.temple && b.t !== 'tent') { // 전통 목조 건물 형태(연출): 몸체 + 기와 우진각 지붕
+      const top = Math.min(hmax + H, y0 + .4 + H + 1.6); // v3.9: 비탈에서 벽이 과하게 높아져 지붕이 하늘을 덮던 문제 — 높이 상한
       const o = obb(r); if (!o) continue; const ang = -o.a; const [cx, cz] = W([o.cx, o.cy]); const w = o.w * S, d = o.d * S; const bodyH = top - y0 - 1.2;
       if (b.t !== 'roof') { const body = new THREE.BoxGeometry(w * .86, Math.max(1.2, bodyH), d * .86); body.rotateY(ang); body.translate(cx, y0 + Math.max(1.2, bodyH) / 2, cz); pushGeo(body, '#e3d6b8', '#e3d6b8'); // 벽
         const pil = new THREE.BoxGeometry(w * .9, .35, d * .9); pil.rotateY(ang); pil.translate(cx, y0 + Math.max(1.2, bodyH) - .2, cz); pushGeo(pil, '#8c3a2b', '#2f7a5c'); } // 붉은 기둥머리·초록 단청 띠(연출)
-      const rh = Math.min(w, d) * .38 + .8; const rf = new THREE.CylinderGeometry(.18, Math.SQRT1_2, 1, 4, 1); rf.rotateY(Math.PI / 4); rf.scale(w * 1.22, rh, d * 1.22); rf.rotateY(ang); rf.translate(cx, top - 1.2 + rh / 2 + (b.t === 'roof' ? 1.2 : 0), cz); pushGeo(rf, '#4b5550', '#4b5550', true);
+      if (b.t !== 'roof') { const bh = Math.max(1.2, bodyH); for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1]]) { if (sx === 0 && w < 4) continue; const pc = new THREE.CylinderGeometry(.16, .18, bh, 8); pc.translate(sx * w * .45, 0, sz * d * .45); pc.rotateY(ang); pc.translate(cx, y0 + bh / 2, cz); pushGeo(pc, '#9b3326', '#9b3326'); } // v3.9 붉은 기둥(연출)
+        const st = new THREE.BoxGeometry(w * 1.05, .6, d * 1.05); st.rotateY(ang); st.translate(cx, y0 + .1, cz); pushGeo(st, '#a39d90', '#bdb6a8'); // 기단
+        const db = new THREE.BoxGeometry(w * .93, .28, d * .93); db.rotateY(ang); db.translate(cx, y0 + bh - .55, cz); pushGeo(db, '#d0a23c', '#2f7a5c'); } // 단청 띠(황·녹, 연출)
+      const rh = Math.min(3.2, Math.min(w, d) * .34 + .9); const { top: rt, under: ru } = templeRoof(w + Math.min(w * .28, 2.2), d + Math.min(d * .32, 2.4), rh); // v3.9: 처마가 휘어 올라간 기와지붕(연출) /* v3.9: 지붕 높이 상한(테스터: 하늘 덮던 검은 지붕) */
+      for (const [gg, cc] of [[rt, '#a3ada9'], [ru, '#b8443a']]) { gg.rotateY(ang); gg.translate(cx, top - 1.25 + (b.t === 'roof' ? 1.2 : 0), cz); pushGeo(gg, cc, cc, true); }
       nb++; continue;
     }
     const shp = new THREE.Shape(r.map(([x, y]) => new THREE.Vector2(x * S, y * S)));
@@ -174,7 +182,7 @@ export async function buildGenWorld(id, scene) {
   if (pos.length) {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     bldMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .85, metalness: 0, emissive: 0xffc070, emissiveIntensity: 0 });
-    const m = new THREE.Mesh(g, bldMat); m.castShadow = true; m.receiveShadow = true; group.add(m); 
+    const m = new THREE.Mesh(g, bldMat); m.userData.mapKind = 'bld'; m.castShadow = true; m.receiveShadow = true; group.add(m); 
   }
 
   // ---- 나무: OSM 나무 점 + 숲/녹지 면 + (숲 맵) 빈 땅에 배치(연출) ----
@@ -186,6 +194,10 @@ export async function buildGenWorld(id, scene) {
   const woodPx = og.getImageData(0, 0, GW, GH).data;
   const cap = C.forest ? 6500 : 2600, tries = C.forest ? 40000 : 30000;
   for (let k = 0; k < tries && treePts.length < cap; k++) { const x = B.x0 + r1() * WX, z = B.z0 + r1() * WZ; const c = cell(x, z); if (c < 0 || !isLand(x, z)) continue; const v = woodPx[c]; if (v > 200 || (v > 100 && r1() < .25)) treePts.push([x, z]); }
+  { const bp = D.pois.find(p => p.n === '황령산 봉수대'); if (bp) { const [bx, bz] = W([bp.x, bp.y]); for (let i = treePts.length - 1; i >= 0; i--) if (Math.hypot(treePts[i][0] - bx, treePts[i][1] - bz) < 26) treePts.splice(i, 1); } } // v3.9: 정상 전망 트임(실제 봉수대 주변은 탁 트인 전망 공간)
+  if (C.vantage) { const pw = n => { const p = D.pois.find(p => p.n === n); return p ? W([p.x, p.y]) : null; }; const p = pw(C.vantage.poi), q = pw(C.vantage.look); // v3.9: 시작 시점→법당 사이 시야 트임(나무만 비움)
+    if (p && q) { const vx = p[0] + C.vantage.dx, vz = p[1] + C.vantage.dz, ex = q[0] - vx, ez = q[1] - vz, L2 = ex * ex + ez * ez;
+      for (let i = treePts.length - 1; i >= 0; i--) { const [x, z] = treePts[i]; const t = Math.max(0, Math.min(1, ((x - vx) * ex + (z - vz) * ez) / L2)); const dd = Math.hypot(x - vx - ex * t, z - vz - ez * t); if (dd < 6 + t * 6 || Math.hypot(x - vx, z - vz) < 10) treePts.splice(i, 1); } } }
   const trunkG = new THREE.CylinderGeometry(.12, .18, 1.6, 6); trunkG.translate(0, .8, 0);
   const roundG = new THREE.IcosahedronGeometry(1, 1); const pineG = new THREE.ConeGeometry(1, 2.4, 7); pineG.translate(0, .6, 0);
   const nT = treePts.length, pineShare = C.forest ? .45 : C.temple ? .5 : .1;
@@ -193,7 +205,7 @@ export async function buildGenWorld(id, scene) {
   const leafMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .9, flatShading: true });
   const nP = treePts.filter((p, i) => hash(i, 3) < pineShare).length;
   const rounds = new THREE.InstancedMesh(roundG, leafMat, Math.max(1, nT - nP)), pines = new THREE.InstancedMesh(pineG, leafMat, Math.max(1, nP));
-  const o3 = new THREE.Object3D(), tc3 = new THREE.Color(); let ri = 0, pi = 0;
+  rounds.userData.mapKind = pines.userData.mapKind = 'tree'; trunks.userData.mapKind = 'hide'; const o3 = new THREE.Object3D(), tc3 = new THREE.Color(); let ri = 0, pi = 0;
   treePts.forEach(([x, z], i) => { const y = rawH(x, z) - .1, s = .8 + hash(x, z) * .7;
     o3.position.set(x, y, z); o3.rotation.set(0, hash(z, x) * 6, 0); o3.scale.set(s, s * (1 + hash(i, 1) * .4), s); o3.updateMatrix(); trunks.setMatrixAt(i, o3.matrix);
     const pine = hash(i, 3) < pineShare; tc3.setHSL(pine ? .3 + hash(i, 5) * .04 : .22 + hash(i, 7) * .1, .45 + hash(i, 9) * .2, pine ? .26 + hash(i, 2) * .08 : .34 + hash(i, 4) * .12);
@@ -205,8 +217,9 @@ export async function buildGenWorld(id, scene) {
   const lampPts = []; if (!C.forest) for (const p of [...D.roads, ...D.paths.filter(p => p.k !== 'path' && p.k !== 'track')]) { let acc = 9; for (let i = 0; i < p.p.length - 1 && lampPts.length < 420; i++) { const [ax, az] = W(p.p[i]), [bx, bz] = W(p.p[i + 1]); const L = Math.hypot(bx - ax, bz - az); while (acc < L) { const t = acc / L, side = (p.w * S) / 2 + .6, nx = -(bz - az) / L, nz = (bx - ax) / L; const x = ax + (bx - ax) * t + nx * side, z = az + (bz - az) * t + nz * side; if (isLand(x, z)) lampPts.push([x, z]); acc += 22; } acc -= L; } }
   const postG = new THREE.CylinderGeometry(.06, .08, 3.2, 6); postG.translate(0, 1.6, 0); const headG = new THREE.SphereGeometry(.22, 10, 8);
   const lampMat = new THREE.MeshStandardMaterial({ color: 0xfff1d0, emissive: 0xffd590, emissiveIntensity: .3 });
-  const posts = new THREE.InstancedMesh(postG, new THREE.MeshStandardMaterial({ color: 0x4a4f55, roughness: .6 }), Math.max(1, lampPts.length)), heads = new THREE.InstancedMesh(headG, lampMat, Math.max(1, lampPts.length));
+  const posts = new THREE.InstancedMesh(postG, new THREE.MeshStandardMaterial({ color: 0x4a4f55, roughness: .6 }), Math.max(1, lampPts.length)), heads = new THREE.InstancedMesh(headG, lampMat, Math.max(1, lampPts.length)); posts.userData.mapKind = heads.userData.mapKind = 'hide';
   lampPts.forEach(([x, z], i) => { const y = rawH(x, z); o3.rotation.set(0, 0, 0); o3.scale.set(1, 1, 1); o3.position.set(x, y, z); o3.updateMatrix(); posts.setMatrixAt(i, o3.matrix); o3.position.y = y + 3.25; o3.updateMatrix(); heads.setMatrixAt(i, o3.matrix); });
+  const clearLampsNear = (x, z, r) => { let n = 0; const dx = Math.sin(r), dz = Math.cos(r); lampPts.forEach(([lx, lz], i) => { const a = (lx - x) * dx + (lz - z) * dz, l = Math.abs((lx - x) * dz - (lz - z) * dx); if (a > -9 && a < 7 && l < 5) { o3.position.set(0, -999, 0); o3.scale.set(0, 0, 0); o3.updateMatrix(); posts.setMatrixAt(i, o3.matrix); heads.setMatrixAt(i, o3.matrix); n++; } }); posts.instanceMatrix.needsUpdate = heads.instanceMatrix.needsUpdate = true; return n; }; // v3.9: 시작 화면 카메라 앞을 사선으로 가로지르는 가로등 정리
   posts.count = heads.count = lampPts.length; posts.frustumCulled = heads.frustumCulled = false; group.add(posts, heads);
 
   // ---- 지점 라벨 ----
@@ -215,7 +228,7 @@ export async function buildGenWorld(id, scene) {
     const c = mk(512, 128), g = c.getContext('2d'); g.font = `700 ${big ? 54 : 44}px sans-serif`; const tw = Math.min(480, g.measureText(text).width + 56);
     g.fillStyle = 'rgba(255,255,255,.88)'; g.beginPath(); g.roundRect((512 - tw) / 2, 24, tw, 80, 40); g.fill(); g.fillStyle = '#1f3a4a'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 256, 66);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false, fog: false, transparent: true })); sp.scale.set(big ? 26 : 18, (big ? 26 : 18) / 4, 1); sp.position.set(x, rawH(x, z) + (big ? 14 : 9), z); sp.renderOrder = 10; group.add(sp); labels.push(sp); return sp;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false, fog: false, transparent: true })); sp.scale.set(big ? 26 : 18, (big ? 26 : 18) / 4, 1); sp.position.set(x, rawH(x, z) + (big ? 14 : 9), z); sp.renderOrder = 10; sp.userData.bw = big ? 26 : 18; group.add(sp); labels.push(sp); return sp;
   }
   const seen = new Set(), pois = [];
   for (const p of [...D.pois.filter(C.poiFilter), ...(C.extraLabels ? C.extraLabels(D) : [])]) { if (seen.has(p.n)) continue; seen.add(p.n); const [x, z] = W([p.x, p.y]); pois.push({ n: p.n, x, z }); label(p.n, x, z, p.n === '광안리해수욕장' || p.n === '감천문화마을' || p.n === '해동용궁사' || p.n === '황령산'); }
@@ -249,7 +262,7 @@ export async function buildGenWorld(id, scene) {
       const cab = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 120, .22, 5), ledMat); group.add(cab);
       const hp = []; for (let k = 2; k < 58; k += 1) { const t = -HALF - SIDE + (2 * HALF + 2 * SIDE) * k / 60; if (Math.abs(Math.abs(t) - HALF) < 2) continue; const p0 = pts[k]; hp.push(p0.x, p0.y, p0.z, p0.x, deckY(p0.x, p0.z) + 2.8, p0.z); }
       const hg = new THREE.BufferGeometry(); hg.setAttribute('position', new THREE.Float32BufferAttribute(hp, 3)); group.add(new THREE.LineSegments(hg, new THREE.LineBasicMaterial({ color: 0xb8c4cc }))); }
-    bridgeInfo = { mid, dir: [dx, dz] };
+    bridgeInfo = { mid, dir: [dx, dz], HALF, SIDE: 200 * S, deckBase, towerH, wHalf, deckY, beach: [bcx, bcz] };
   }
 
   // ---- 하늘·별·달 (직접 작성 셰이더) ----
@@ -264,7 +277,7 @@ export async function buildGenWorld(id, scene) {
   const moon = new THREE.Mesh(new THREE.SphereGeometry(28, 24, 16), new THREE.MeshBasicMaterial({ color: 0xfff6dc, fog: false, transparent: true })); group.add(moon);
   let starBase = 0, curT = null;
   function setTime(c) {
-    curT = c; skyU.top.value.set(c.skyTop); skyU.bot.value.set(c.skyBot); skyU.sunDir.value.set(c.sunX, c.sunY, c.sunZ); skyU.sunVis.value = c.sunVis;
+    v39?.setTime(c); curT = c; skyU.top.value.set(c.skyTop); skyU.bot.value.set(c.skyBot); skyU.sunDir.value.set(c.sunX, c.sunY, c.sunZ); skyU.sunVis.value = c.sunVis;
     starBase = c.starVis ?? 0; stars.visible = starBase > .02; const mv = c.moon ?? 0; moon.visible = mv > .02; moon.material.opacity = Math.min(1, mv * 1.2);
     lampMat.emissiveIntensity = c.lamp * 1.1; for (const m of bridgeMats) m.emissiveIntensity = .2 + c.lamp * 1.4;
     if (bldMat) bldMat.emissiveIntensity = Math.max(0, (c.city ?? 0) - .3) * .06; // 밤 창 불빛 느낌(연출, 아주 약하게)
@@ -273,10 +286,14 @@ export async function buildGenWorld(id, scene) {
   let ledH = 0;
   function update(t, dt, camera) {
     if (camera) { sky.position.copy(camera.position); stars.position.copy(camera.position); moon.position.copy(camera.position).add(new THREE.Vector3(-700, 520, -900)); }
-    if (seaTex) seaTex.offset.set(t * .004, t * .006);
+    if (camera) for (const sp of labels) { // v3.9: 월드 라벨 크기 상한(거리 비례) + 너무 가까우면 숨김 + 화면 위로 벗어나면 숨김 → 화면을 거대하게 가리지 않음
+      const d = camera.position.distanceTo(sp.position), w = Math.min(sp.userData.bw, d * .22); sp.scale.set(w, w / 4, 1);
+      sp.material.opacity = Math.max(0, Math.min(1, (d - 10) / 12)); sp.visible = sp.material.opacity > .02; }
+    v39?.update(t, dt, camera); if (seaTex) seaTex.offset.set(t * .004, t * .006);
     stars.material.opacity = starBase * (.8 + .2 * Math.sin(t * 2.3));
     if (bridgeMats.length && curT && curT.lamp > 1) { ledH = (t * .03) % 1; bridgeMats[0].emissive.setHSL(.5 + .2 * Math.sin(t * .2), .8, .55); } else if (bridgeMats.length) bridgeMats[0].emissive.set(0x7fd8ff);
   }
+  const v39 = addV39({ id, D, C, group, W, B, rawH, isLand, isWalkable, painter, tc, tg, TK, groundTex, sea, bridge: bridgeInfo, bridgeMats, hash });
   const waterNear = (x, z) => { if (!D.coast) return 0; for (const [r, v] of [[3, .9], [10, .7], [22, .45], [40, .25]]) for (let a = 0; a < 8; a++) if (!isLand(x + Math.cos(a * .785) * r, z + Math.sin(a * .785) * r)) return v; return 0; };
 
   // ---- 시작 지점·방향, 테스트 목표 ----
@@ -326,5 +343,13 @@ export async function buildGenWorld(id, scene) {
   if (C.see === 'bigbld') { const area = p => { let a = 0; for (let k = 0; k < p.length; k++) { const q = p[k], r = p[(k + 1) % p.length]; a += q[0] * r[1] - r[0] * q[1]; } return Math.abs(a / 2); };
     const bs = D.buildings.filter(b => b.p && b.p.length > 2).sort((a, b) => area(b.p) - area(a.p)).slice(0, 4); if (bs.length) { let x = 0, y = 0, n = 0; for (const b of bs) for (const q of b.p) { x += q[0]; y += q[1]; n++; } seeTarget = W([x / n, y / n]); } }
   else if (C.see && C.see.startsWith('poi:')) seeTarget = poiW(C.see.slice(4));
-  return { seeTarget, occluders, id, name: C.name, note: C.note, group, isWalkable, heightAt, isLand, waterNear, walkMeshes: [terrain], setTime, update, topPreview() {}, start: { x: sx, z: sz, rot }, goal, bounds: B, topView, pois, stats, fogMul: C.fogMul || 1, dispose, bridge: bridgeInfo };
+  let fixedStart = false;
+  if (C.vantage && C.vantage.fixed) { const p = poiW(C.vantage.poi), q = poiW(C.vantage.look); if (p && q) { [sx, sz] = nearestWalk(p[0] + C.vantage.dx, p[1] + C.vantage.dz); const g2 = poiW(C.vantage.poi); const mx = q[0] * .8 + g2[0] * .2 + 9, mz = q[1] * .8 + g2[1] * .2; void g2; rot = Math.atan2(mx - sx, mz - sz); fixedStart = true;
+    { // v3.9 시작 화면 앞 바닷가 쪽 삼층석탑(연출: 위치는 구도용, 형태는 한국 석탑 일반형) — 코드로 만든 화강암 상자
+      const [tx, tz] = nearestWalk(sx + Math.sin(rot) * 9 + Math.cos(rot) * 4.5, sz + Math.cos(rot) * 9 - Math.sin(rot) * 4.5); const gm = new THREE.MeshStandardMaterial({ color: 0xc9c3b6, roughness: .9 }); const tg2 = new THREE.Group(); let y = 0;
+      const box = (w, h) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), gm); m.position.y = y + h / 2; m.castShadow = true; tg2.add(m); y += h; };
+      box(2.2, .35); box(1.8, .5); for (let k = 0; k < 3; k++) { box(1.1 - k * .18, .55 - k * .08); box(1.9 - k * .3, .16); }
+      const fin = new THREE.Mesh(new THREE.CylinderGeometry(.05, .08, .7, 6), gm); fin.position.y = y + .35; tg2.add(fin);
+      tg2.position.set(tx, rawH(tx, tz) - .05, tz); tg2.rotation.y = rot; group.add(tg2); } } } // v3.9: 바닷가 길에서 법당·대불·바다가 한 화면에 들어오는 지정 시점
+  return { clearLampsNear, seeSea: !!C.vantage, seeTarget: fixedStart ? null : seeTarget, occluders, id, name: C.name, note: C.note, group, isWalkable, heightAt, isLand, waterNear, walkMeshes: [terrain], setTime, update, topPreview() {}, start: { x: sx, z: sz, rot, fixed: fixedStart, camDist: fixedStart ? C.vantage.cam : undefined }, goal, bounds: B, topView, pois, stats, fogMul: C.fogMul || 1, dispose, bridge: bridgeInfo, droneStart: v39.droneStart, droneInfo: v39.droneInfo, v39: v39.extras };
 }

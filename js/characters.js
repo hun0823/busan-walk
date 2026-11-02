@@ -73,6 +73,12 @@ export function makeGuardian() {
   const prof = [[0,.3],[.16,.32],[.27,.4],[.315,.55],[.31,.7],[.27,.83],[.2,.92],[.19,.96],[.25,1.0],[.3,1.08],[.315,1.18],[.29,1.32],[.2,1.43],[.09,1.48],[0,1.49]];
   const cr = new THREE.SplineCurve(prof.map(q => new THREE.Vector2(q[0], q[1]))), pts = cr.getPoints(60); pts[0].x = 0; pts[pts.length - 1].x = 0;
   const blob = new THREE.Mesh(new THREE.LatheGeometry(pts, 48), M); blob.scale.z = .9; blob.geometry.computeVertexNormals(); body.add(blob);
+  { // v3.9 최소한의 얼굴: 눈 두 개 + 하이라이트(귀·옷 없음 유지)
+    const eyeM = clay(0x2e221c, { rough: .35, rim: 0 }), hiM = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    for (const s of [-1, 1]) { const x = s * .1, y = 1.2, z = .9 * Math.sqrt(.315 * .315 - x * x) - .004;
+      const e = new THREE.Mesh(new THREE.SphereGeometry(.034, 14, 10), eyeM); e.scale.set(1, 1.2, .5); e.position.set(x, y, z); body.add(e);
+      const h = new THREE.Mesh(new THREE.SphereGeometry(.011, 8, 6), hiM); h.position.set(x - .01, y + .014, z + .016); body.add(h); }
+  }
   const legs = [], arms = [];
   for (const s of [-1, 1]) {
     const leg = new THREE.Group(); leg.position.set(s * .12, .4, 0);

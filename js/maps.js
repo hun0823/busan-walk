@@ -20,6 +20,7 @@ export async function getWorld(id, scene) {
   w.group.visible = false;
   w.occluders = collectOccluders(w); // v3.7: 모든 맵 카메라 장애물 보정
   if (id !== 'gwangalli') fixStartRot(w);
+  if (w.clearLampsNear && id !== 'gwangalli') w.start.lampsCleared = w.clearLampsNear(w.start.x, w.start.z, w.start.rot);
   return cache[id] = w;
 }
 export function setActive(w) { for (const k in cache) cache[k].group.visible = cache[k] === w; isWalkable = w.isWalkable; heightAt = w.heightAt; }
@@ -52,12 +53,15 @@ function fixStartRot(w) {
     for (let dd = 1; dd <= 7.5; dd += 1.5) { const px = x - Math.sin(r) * dd, pz = z - Math.cos(r) * dd; if (!w.isWalkable(px, pz)) n += .5; } // 카메라 뒤가 막힌 골목이면 감점
     return n; };
   const bestRot = (x, z, fine, steps) => { let best = s.rot, bn = 1e9; for (let k = 0; k <= steps; k++) for (const sg of k ? [1, -1] : [1]) { const r = s.rot + sg * k * Math.PI / steps, n = score(x, z, r, fine) + k / steps * 2; if (n < bn) { bn = n; best = r; } } return [best, bn]; };
-  s.rot0 = s.rot;
+  s.rot0 = s.rot; if (s.fixed) return;
   if (w.seeTarget) { // 대상(절·봉수대)이 보이는 자리: 대상까지 시선이 나무에 막히지 않고 12~40단위 떨어진 보행로
     const [tx, tz] = w.seeTarget; let bp = null, bs = 1e9;
     const sightHits = (x, z) => { const h0 = w.heightAt(x, z) + 1.6; o.set(x, h0, z); const L = Math.hypot(tx - x, tz - z); d.set(tx - x, (w.heightAt(tx, tz) + 3) - h0, tz - z).normalize(); rc.set(o, d); rc.near = 1; rc.far = Math.max(1, L - 4); return rc.intersectObjects(w.occluders, false).length; };
-    for (let rr = 10; rr <= 42; rr += 4) for (let a = 0; a < 32; a++) { const x = tx + Math.cos(a / 32 * 6.283) * rr, z = tz + Math.sin(a / 32 * 6.283) * rr; if (!w.isWalkable(x, z) || !w.isWalkable(x + .6, z) || !w.isWalkable(x, z + .6)) continue;
-      const r0 = Math.atan2(tx - x, tz - z); const sc = sightHits(x, z) * 3 + score(x, z, r0, false) + Math.abs(rr - 22) * .05; if (sc < bs) { bs = sc; bp = [x, z, r0]; } }
+    for (let rr = w.seeSea ? 22 : 10; rr <= (w.seeSea ? 54 : 42); rr += 4) for (let a = 0; a < 32; a++) { const x = tx + Math.cos(a / 32 * 6.283) * rr, z = tz + Math.sin(a / 32 * 6.283) * rr; if (!w.isWalkable(x, z) || !w.isWalkable(x + .6, z) || !w.isWalkable(x, z + .6)) continue;
+      let r0 = Math.atan2(tx - x, tz - z); let sc = sightHits(x, z) * 3 + score(x, z, r0, false) + Math.abs(rr - 22) * .05;
+      if (w.seeSea) { // v3.9 용궁사: 대상 뒤·옆으로 바다가 함께 보이는 자리(바닷가 사찰 구도) + 가까운 큰 지붕 회피
+        let sea = 0; for (let fa = -.5; fa <= .51; fa += .125) for (let fd = 15; fd <= 90; fd += 15) if (!w.isLand(x + Math.sin(r0 + fa) * fd, z + Math.cos(r0 + fa) * fd)) sea++;
+        sc += sightHits(x, z) * 3 + Math.abs(rr - 32) * .03 - sea * .3; } if (sc < bs) { bs = sc; bp = [x, z, r0]; } }
     if (bp) { s.x = bp[0]; s.z = bp[1]; s.rot = bp[2]; s.startScore = +bs.toFixed(2); s.see = true; return; }
   }
   let [r, n] = bestRot(s.x, s.z, true, 24);

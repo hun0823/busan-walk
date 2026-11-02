@@ -103,7 +103,7 @@ function setTime(key, instant) { // 관리자/테스트: 'morning'|'noon'|'eveni
 // ---------- 카메라 ----------
 const _q = new URLSearchParams(location.search);
 const PORTRAIT = () => innerWidth / innerHeight < 0.8; // v3.7: 세로 화면은 더 멀리·넓게
-let yaw = _sp0.rot - Math.PI + +(_q.get('yaw') || 0), pitch = PORTRAIT() ? 0.36 : 0.3, dist = PORTRAIT() ? 7.2 : 4.6; // 캐릭터가 화면 높이 약 1/3 (디버그: ?yaw=3.14 앞모습)
+let yaw = _sp0.rot - Math.PI + +(_q.get('yaw') || 0), pitch = PORTRAIT() ? 0.36 : 0.3, dist = PORTRAIT() ? 7.2 : 4.6; if (_sp0.camDist) { dist = Math.max(dist, _sp0.camDist * (PORTRAIT() ? 1.25 : 1)); pitch = PORTRAIT() ? .2 : .14; } // v3.9: 지정 시점 맵(용궁사)은 조금 뒤에서 // 캐릭터가 화면 높이 약 1/3 (디버그: ?yaw=3.14 앞모습)
 const camTarget = new THREE.Vector3().copy(start);
 const _cray = new THREE.Raycaster(), _cdir = new THREE.Vector3(); let camDS = dist, camPS = pitch;
 const TOP = _q.get('view') === 'top'; if (TOP) document.body.classList.add('topview'); // 디버그: 위에서 본 지도 컷(북쪽이 화면 위)
@@ -270,6 +270,8 @@ $('#title').addEventListener('click', () => { const n = performance.now(); title
 function showAdmin() { $('#adminPanel').classList.add('open'); }
 if (admin) showAdmin();
 document.querySelectorAll('#adminPanel [data-ph]').forEach(b => b.onclick = () => setTime(b.dataset.ph === 'auto' ? null : b.dataset.ph));
+$('#admDrone').onclick = () => { if (curMap !== 'gwangalli') { toast('드론쇼는 광안리 맵에서 볼 수 있어요'); return; } if (!clock.override && curPhase().phase !== 'evening') setTime('evening'); world.droneStart?.(); }; // v3.9
+addEventListener('bw-drone', () => { sound.chime?.(); toast('🛸 광안리 드론쇼 (연출) — 실제는 매주 토요일 밤'); });
 $('#admPause').onclick = () => { if (clock.paused) { clock.offset = clock.pausedAt - Date.now(); clock.paused = false; } else { clock.pausedAt = nowMs(); clock.paused = true; } };
 $('#admClose').onclick = () => $('#adminPanel').classList.remove('open');
 let admAcc = 0;
@@ -418,7 +420,40 @@ $('#srv').addEventListener('click', e => { e.stopPropagation(); mapMenu.classLis
 mapMenu.addEventListener('click', e => { e.stopPropagation(); const b = e.target.closest('[data-map]'); if (b) switchMap(b.dataset.map); });
 mapMenu.addEventListener('pointerdown', e => e.stopPropagation());
 addEventListener('pointerdown', e => { if (mapMenu.classList.contains('open') && !e.target.closest('#mapMenu,#srv')) closeMapMenu(); });
-const mapView = initMapView({ maps: MAPS, getCur: () => curMap, getMe: () => ({ x: guardian.root.position.x, z: guardian.root.position.z, rot: guardian.root.rotation.y }) });
+// v3.9 지도 뷰어용 탑뷰: 실제 지도 대신 '게임 월드 그 자체'(땅·물·길·건물·나무 메시)를 정사영 카메라로 위에서 한 번 렌더해 맵별 캐시
+const _topCache = {};
+async function renderTop(id, R) { // R: 월드 좌표 사각형 {x0,x1,z0,z1}
+  const key = id + ':' + [R.x0, R.x1, R.z0, R.z1].map(v => v.toFixed(1)).join(','); if (_topCache[key]) return _topCache[key];
+  const w = await getWorld(id, scene); const PX = 1024, aspect = (R.x1 - R.x0) / (R.z1 - R.z0), cw = aspect >= 1 ? PX : Math.round(PX * aspect), ch = aspect >= 1 ? Math.round(PX / aspect) : PX;
+  const cam = new THREE.OrthographicCamera(R.x0, R.x1, -R.z0, -R.z1, 1, 3000); // up = -z(북쪽이 위)
+  const cx = (R.x0 + R.x1) / 2, cz = (R.z0 + R.z1) / 2; cam.position.set(0, 1500, 0); cam.up.set(0, 0, -1); cam.lookAt(0, 0, 0);
+  cam.left = R.x0; cam.right = R.x1; cam.top = -R.z0; cam.bottom = -R.z1; cam.updateProjectionMatrix(); void cx; void cz;
+  const vis = []; scene.children.forEach(o => { vis.push([o, o.visible]); o.visible = o === w.group || o.isLight; });
+  // v3.9b 단순화: 라벨·별·하늘·가로등·줄기 숨김, 건물은 한 가지 연한 톤, 나무는 따로 렌더해 연녹색 면으로
+  const hidden = [], swapped = [], trees = [], BLD = new THREE.MeshBasicMaterial({ color: 0xe8e1d4 }), WHITE = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  w.group.traverse(o => { if (!o.visible) return; const k = o.userData.mapKind;
+    if (o.isSprite || o.isPoints || o.isLine || k === 'hide' || (o.material && o.material.side === THREE.BackSide)) { hidden.push(o); o.visible = false; }
+    else if (k === 'tree') { trees.push(o); o.visible = false; }
+    else if (k === 'bld') { swapped.push([o, o.material]); o.material = BLD; } });
+  const keep = { hc: hemi.color.getHex(), hg: hemi.groundColor.getHex(), hi: hemi.intensity, sc: sun.color.getHex(), si: sun.intensity, ex: renderer.toneMappingExposure, fn: scene.fog && scene.fog.near, ff: scene.fog && scene.fog.far, bg: scene.background, sh: renderer.shadowMap.enabled };
+  hemi.color.set(0xffffff); hemi.groundColor.set(0xffffff); hemi.intensity = 2.4; sun.intensity = 0.6; renderer.toneMappingExposure = 1.05; if (scene.fog) { scene.fog.near = 1e5; scene.fog.far = 1e6; } scene.background = new THREE.Color(0x3f8fb5);
+  const sz = renderer.getSize(new THREE.Vector2()), pr = renderer.getPixelRatio(); renderer.setPixelRatio(1); renderer.setSize(cw, ch, false);
+  renderer.render(scene, cam); const c = document.createElement('canvas'); c.width = cw; c.height = ch; const g = c.getContext('2d'); g.filter = 'blur(' + (cw / 420).toFixed(1) + 'px)'; g.drawImage(renderer.domElement, 0, 0, cw, ch); g.filter = 'none'; // 땅 텍스처 잔점 흐림(단순화)
+  if (trees.length) { // 나무만 흰색으로 검은 바탕에 렌더 → 흐림+문턱으로 덩어리 면 마스크
+    const mats = []; w.group.traverse(o => { if (o.isMesh && o.visible) { mats.push(o); o.visible = false; } }); trees.forEach(t => { t.visible = true; swapped.push([t, t.material]); t.material = WHITE; });
+    scene.background = new THREE.Color(0x000000); renderer.render(scene, cam);
+    const m = document.createElement('canvas'); m.width = cw; m.height = ch; const mg = m.getContext('2d'); mg.filter = 'blur(' + Math.max(6, cw / 70) + 'px)'; mg.drawImage(renderer.domElement, 0, 0, cw, ch);
+    const md = mg.getImageData(0, 0, cw, ch).data, im = g.getImageData(0, 0, cw, ch), d = im.data;
+    for (let i = 0; i < md.length; i += 4) if (md[i] > 45) { d[i] = 0xc4; d[i + 1] = 0xe0; d[i + 2] = 0xab; }
+    g.putImageData(im, 0, 0); mats.forEach(o => o.visible = true); trees.forEach(t => t.visible = false);
+  }
+  renderer.setPixelRatio(pr); renderer.setSize(sz.x, sz.y, false);
+  hemi.color.setHex(keep.hc); hemi.groundColor.setHex(keep.hg); hemi.intensity = keep.hi; sun.color.setHex(keep.sc); sun.intensity = keep.si; renderer.toneMappingExposure = keep.ex; if (scene.fog) { scene.fog.near = keep.fn; scene.fog.far = keep.ff; } scene.background = keep.bg;
+  for (const [o, mt] of swapped) o.material = mt; for (const o of trees) o.visible = true;
+  for (const [o, v] of vis) o.visible = v; for (const o of hidden) o.visible = true;
+  return _topCache[key] = { img: c, pois: w.pois || [] };
+}
+const mapView = initMapView({ renderTop, maps: MAPS, getCur: () => curMap, getMe: () => ({ x: guardian.root.position.x, z: guardian.root.position.z, rot: guardian.root.rotation.y }) });
 window.__game = { mapView, openMapMenu, switchMap,  sound, breedsGrid, lineup, setTime: k => setTime(k, true), say, startRest, stopRest, openDogModal, swapDog, get rest() { return rest.on; }, test: { setPos: (x, z, r) => { guardian.root.position.set(x, heightAt(x, z), z); dog.root.position.set(x + .8, heightAt(x + .8, z + .8), z + .8); if (r !== undefined) yaw = r; }, setYaw: v => { yaw = v; }, setCam: (y, p, d) => { yaw = y; pitch = p; dist = d; }, getCam: () => [yaw, pitch, dist], get dog() { return dog.root; }, guardian: guardian.root, moveChar, get isWalkable() { return isWalkable; }, get heightAt() { return heightAt; }, get world() { return world; }, switchMap: id => switchMap(id), get map() { return curMap; } } }; // test: tools/walktest.mjs 용
 
 setLoad(100);
