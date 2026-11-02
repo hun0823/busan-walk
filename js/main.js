@@ -41,7 +41,10 @@ setLoad(30);
 const _q0m = new URLSearchParams(location.search);
 const LSm = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 let curMap = mapById(_q0m.get('map')) ? _q0m.get('map') : mapById(LSm.get('bw.map')) ? LSm.get('bw.map') : 'bukhang';
-let world = await getWorld(curMap, scene); setActive(world);
+let world; try { world = await getWorld(curMap, scene); } catch (e) { // v3.9c: 맵 생성 실패 시 로딩 화면에 짧게 알리고 북항으로 진입
+  console.warn('map load failed', curMap, e); window.__loadErr && window.__loadErr('맵 불러오기 실패(' + curMap + '): ' + (e && e.message || e) + ' · 북항으로 들어갑니다', true);
+  LSm.set('bw.map', 'bukhang'); curMap = 'bukhang'; world = await getWorld(curMap, scene); }
+setActive(world);
 const savedPos = id => { const v = (LSm.get('bw.pos.' + id) || '').split(',').map(Number); return v.length === 3 && v.every(Number.isFinite) ? { x: v[0], z: v[1], rot: v[2] } : null; };
 const sound = new BgSound(); // 배경음(직접 합성) — 첫 터치/클릭 후 시작, 음소거는 localStorage bw.mute
 let nearAcc = 0;

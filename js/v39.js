@@ -52,19 +52,19 @@ export function addV39(X) {
   const TW = tc.width, TH = tc.height;
 
   // ---------------- 광안리 해변·바다 ----------------
-  if (id === 'gwangalli' && D.coast) {
+  if (id === 'gwangalli' && D.coast) { const tmp = [], mkT = (w, h) => { const c = mk(w, h); tmp.push(c); return c; }; // v3.9c: 임시 캔버스는 다 쓰면 바로 해제(iPad Safari 캔버스 메모리 한도 대응)
     // (1) 지면 텍스처: 수중 모래 그라데이션 → 젖은 모래 띠 → 마른 모래 결·바람 물결무늬
-    const seaM = mk(TW, TH), sg = seaM.getContext('2d'); sg.fillStyle = '#000'; sg.fillRect(0, 0, TW, TH); sg.globalCompositeOperation = 'destination-out'; painter(sg, TK).fill(D.land, '#000'); sg.globalCompositeOperation = 'source-over';
-    const landM = mk(TW, TH), lg = landM.getContext('2d'); painter(lg, TK).fill(D.land, '#000');
-    const beachM = mk(TW, TH), bg = beachM.getContext('2d'); painter(bg, TK).fill(D.beach, '#000');
-    const layer = (src, blur, color, clip, mode = 'destination-in', alpha = 1) => { const c = mk(TW, TH), g = c.getContext('2d'); g.filter = `blur(${blur}px)`; g.drawImage(src, 0, 0); g.filter = 'none'; g.globalCompositeOperation = 'source-in'; g.fillStyle = color; g.fillRect(0, 0, TW, TH); if (clip) { g.globalCompositeOperation = mode; g.drawImage(clip, 0, 0); } tg.globalAlpha = alpha; tg.drawImage(c, 0, 0); tg.globalAlpha = 1; };
+    const seaM = mkT(TW, TH), sg = seaM.getContext('2d'); sg.fillStyle = '#000'; sg.fillRect(0, 0, TW, TH); sg.globalCompositeOperation = 'destination-out'; painter(sg, TK).fill(D.land, '#000'); sg.globalCompositeOperation = 'source-over';
+    const landM = mkT(TW, TH), lg = landM.getContext('2d'); painter(lg, TK).fill(D.land, '#000');
+    const beachM = mkT(TW, TH), bg = beachM.getContext('2d'); painter(bg, TK).fill(D.beach, '#000');
+    const layer = (src, blur, color, clip, mode = 'destination-in', alpha = 1) => { const c = mkT(TW, TH), g = c.getContext('2d'); g.filter = `blur(${blur}px)`; g.drawImage(src, 0, 0); g.filter = 'none'; g.globalCompositeOperation = 'source-in'; g.fillStyle = color; g.fillRect(0, 0, TW, TH); if (clip) { g.globalCompositeOperation = mode; g.drawImage(clip, 0, 0); } tg.globalAlpha = alpha; tg.drawImage(c, 0, 0); tg.globalAlpha = 1; };
     // 수중: 해안 가까이 모래빛 → 먼바다 청록
     layer(landM, 26 * TK / 4.87, '#c9b98d', landM, 'destination-out', .95);
     layer(landM, 10 * TK / 4.87, '#d8c79a', landM, 'destination-out', .9);
     // 마른 모래: 도로 쪽 밝게 → 물가 쪽 약간 짙게
     layer(seaM, 70, '#e6cf9c', beachM, 'destination-in', .75);
     // 결 노이즈·바람 물결 무늬(해변 안쪽만)
-    { const c = mk(TW, TH), g = c.getContext('2d'); const r = rngF(91);
+    { const c = mkT(TW, TH), g = c.getContext('2d'); const r = rngF(91);
       for (let k = 0; k < TW * TH / 9; k++) { const v = r(); g.fillStyle = v < .5 ? `rgba(120,96,60,${.08 + r() * .1})` : `rgba(255,250,235,${.1 + r() * .14})`; g.fillRect(r() * TW, r() * TH, 1, 1); }
       g.lineWidth = 1; for (let k = 0; k < TW * TH / 900; k++) { const x = r() * TW, y = r() * TH, l = 6 + r() * 14; g.strokeStyle = `rgba(160,130,85,${.12 + r() * .12})`; g.beginPath(); g.moveTo(x, y); g.bezierCurveTo(x + l * .3, y - 2, x + l * .7, y + 2, x + l, y); g.stroke(); }
       for (let k = 0; k < 160; k++) { const x = r() * TW, y = r() * TH; g.fillStyle = `rgba(110,90,70,${.12 + r() * .15})`; g.beginPath(); g.ellipse(x, y, 2 + r() * 3, 1.2 + r() * 2, r() * 3, 0, 7); g.fill(); } // 발자국 자국 느낌(연출)
@@ -72,9 +72,10 @@ export function addV39(X) {
     // 젖은 모래 띠(물가 4~6단위) + 아주 젖은 가장자리
     layer(seaM, 22 * TK / 4.87, '#b99c6c', beachM, 'destination-in', .85);
     layer(seaM, 7 * TK / 4.87, '#a58a5e', beachM, 'destination-in', .7);
-    { const c = mk(TW, TH), g = c.getContext('2d'); g.filter = `blur(${3 * TK / 4.87}px)`; g.drawImage(seaM, 0, 0); g.filter = 'none'; g.globalCompositeOperation = 'source-in'; g.fillStyle = '#f6f2e6'; g.fillRect(0, 0, TW, TH); // 얇은 거품 자국
+    { const c = mkT(TW, TH), g = c.getContext('2d'); g.filter = `blur(${3 * TK / 4.87}px)`; g.drawImage(seaM, 0, 0); g.filter = 'none'; g.globalCompositeOperation = 'source-in'; g.fillStyle = '#f6f2e6'; g.fillRect(0, 0, TW, TH); // 얇은 거품 자국
       g.globalCompositeOperation = 'destination-in'; g.drawImage(beachM, 0, 0); g.globalCompositeOperation = 'destination-out'; g.drawImage(seaM, 0, 0); tg.globalAlpha = .55; tg.drawImage(c, 0, 0); tg.globalAlpha = 1; }
     groundTex.needsUpdate = true;
+    for (const c of tmp) { c.width = c.height = 0; }
     api.extras.beachTex = true;
   }
 
@@ -85,7 +86,7 @@ export function addV39(X) {
     const sc = mk(MW, MH), sgc = sc.getContext('2d'); const k = MW / (B.x1 - B.x0);
     sgc.fillStyle = '#000'; sgc.fillRect(0, 0, MW, MH); sgc.filter = `blur(${Math.round(14 * k)}px)`; sgc.drawImage(lc, 0, 0); sgc.filter = 'none'; sgc.globalAlpha = .55; sgc.filter = `blur(${Math.max(1, Math.round(2.5 * k))}px)`; sgc.drawImage(lc, 0, 0); sgc.filter = 'none'; sgc.globalAlpha = 1;
     // R: 넓은 흐림(얕은 정도) / G: 해안선 근처(거품 위치)
-    const shoreTex = new THREE.CanvasTexture(sc); shoreTex.colorSpace = THREE.NoColorSpace; shoreTex.minFilter = THREE.LinearFilter;
+    lc.width = lc.height = 0; const shoreTex = new THREE.CanvasTexture(sc); shoreTex.colorSpace = THREE.NoColorSpace; shoreTex.minFilter = THREE.LinearFilter;
     const sm = sea.material; sm.transparent = true; sm.depthWrite = false; sea.renderOrder = 1;
     const su = { shoreTex: { value: shoreTex }, sb: { value: new THREE.Vector4(B.x0, B.z0, B.x1 - B.x0, B.z1 - B.z0) }, uT: { value: 0 }, uFoam: { value: 1 } };
     sm.onBeforeCompile = sh => { Object.assign(sh.uniforms, su);
