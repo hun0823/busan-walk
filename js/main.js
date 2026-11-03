@@ -2,17 +2,17 @@
 // 모든 모델/텍스처/사운드는 Three.js 기본 도형과 절차 생성으로 직접 제작. (외부 에셋 없음)
 // 월드 배치는 실제 지도가 아니라 상상 구성(연출)이다. 요소 목록만 디자이너 전달 자료 기준.
 import * as THREE from 'three';
-import { S as MAP_SCALE } from './world.js?v=39t';
-import { MAPS, mapById, getWorld, setActive, isWalkable, heightAt } from './maps.js?v=39t';
-import { makeGuardian, makeDog } from './characters.js?v=39t';
-import { initMapView } from './mapview.js?v=39t';
-import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js?v=39t';
-import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js?v=39t';
-import { NetState, initNetStatus, NetClient, ANIM, SAY_TEXT } from './net.js?v=39t';
-import { SERVER_URL, NET } from './config.js?v=39t';
-import { makeMat } from './mat.js?v=39t';
-import { SLOTS, encode, decode, applyOutfit, makeGroundItem } from './outfit.js?v=39t';
-import { BgSound, TRACKS } from './sound.js?v=39t';
+import { S as MAP_SCALE } from './world.js?v=39v';
+import { MAPS, mapById, getWorld, setActive, isWalkable, heightAt } from './maps.js?v=39v';
+import { makeGuardian, makeDog } from './characters.js?v=39v';
+import { initMapView } from './mapview.js?v=39v';
+import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js?v=39v';
+import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js?v=39v';
+import { NetState, initNetStatus, NetClient, ANIM, SAY_TEXT } from './net.js?v=39v';
+import { SERVER_URL, NET } from './config.js?v=39v';
+import { makeMat } from './mat.js?v=39v';
+import { SLOTS, encode, decode, applyOutfit, makeGroundItem } from './outfit.js?v=39v';
+import { BgSound, TRACKS } from './sound.js?v=39v';
 
 const $ = s => document.querySelector(s);
 const setLoad = (p, t) => { $('#loadbar').style.width = p + '%'; if (t && window.__step) window.__step(t); };
@@ -43,6 +43,7 @@ setLoad(30, '맵 불러오는 중');
 const _q0m = new URLSearchParams(location.search);
 const LSm = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 let curMap = mapById(_q0m.get('map')) ? _q0m.get('map') : mapById(LSm.get('bw.map')) ? LSm.get('bw.map') : 'bukhang';
+if (LSm.get('bw.map') && !mapById(LSm.get('bw.map'))) LSm.set('bw.map', 'bukhang'); // v3.9u: 비활성 맵(감천) 저장값 → 북항
 if (_q0m.has('reset')) { try { for (const k of Object.keys(localStorage)) if (k === 'bw.map' || k.startsWith('bw.pos.')) localStorage.removeItem(k); } catch {} curMap = mapById(_q0m.get('map')) ? _q0m.get('map') : 'bukhang'; } // v3.9d: ?reset=1 저장 맵·위치 초기화
 const _withTO = (p, ms) => Promise.race([p, new Promise((_, rj) => setTimeout(() => rj(new Error(ms / 1000 + '초 안에 맵을 만들지 못함')), ms))]);
 let world; try { world = await _withTO(getWorld(curMap, scene), curMap === 'bukhang' ? 60000 : 15000); } catch (e) { // v3.9c: 맵 생성 실패 시 로딩 화면에 짧게 알리고 북항으로 진입
@@ -225,13 +226,16 @@ function takePhoto() {
   say('찰칵! 예쁘게 나왔나요?');
 }
 sound.muted = LS.get('bw.mute') === '1'; $('#btnSound').textContent = sound.muted ? '🔇' : '🔊';
-addEventListener('pointerdown', () => sound.start(), { once: true, capture: true }); addEventListener('keydown', () => sound.start(), { once: true });
+// v3.9u: iOS 소리 잠금 해제 — 첫 터치 한 번만 듣지 않고, 실제로 running이 될 때까지 터치·클릭·키마다 다시 시도(touchend/click이 iOS의 사용자 동작)
+{ const ev = ['pointerdown', 'touchend', 'click', 'keydown'], un = () => { sound.unlock(); if (sound.ctx && sound.ctx.state === 'running') ev.forEach(e => removeEventListener(e, un, true)); };
+  ev.forEach(e => addEventListener(e, un, { capture: true, passive: true }));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && sound.ctx && sound.ctx.state !== 'running') { sound.ctx.resume?.().catch(() => {}); ev.forEach(e => addEventListener(e, un, { capture: true, passive: true })); } }); }
 $('#btnSound').onclick = () => { const m = !sound.muted; sound.setMuted(m); LS.set('bw.mute', m ? '1' : '0'); $('#btnSound').textContent = m ? '🔇' : '🔊'; renderBgm(); };
 // v3.9r: 맵별 배경음악 목록(미리듣기) — 문구 없이 목록만
 sound.setTrack(curMap);
 function renderBgm() {
   const pv = sound.preview, mapT = sound.track;
-  $('#bgmList').innerHTML = Object.entries(TRACKS).map(([id, t]) => `<button class="bgmi${(pv || mapT) === id ? ' on' : ''}" data-t="${id}"><span>${(pv || mapT) === id && !sound.muted ? '♪' : '▶'}</span> ${t.name}<small>${mapById(id)?.name || ''}${id === mapT ? ' · 이 맵' : ''}</small></button>`).join('');
+  $('#bgmList').innerHTML = Object.entries(TRACKS).filter(([id]) => mapById(id)).map(([id, t]) => `<button class="bgmi${(pv || mapT) === id ? ' on' : ''}" data-t="${id}"><span>${(pv || mapT) === id && !sound.muted ? '♪' : '▶'}</span> ${t.name}<small>${mapById(id)?.name || ''}${id === mapT ? ' · 이 맵' : ''}</small></button>`).join('');
 }
 $('#bgmList').onclick = e => { const b = e.target.closest('button[data-t]'); if (!b) return; const id = b.dataset.t;
   if (sound.muted) { sound.setMuted(false); LS.set('bw.mute', '0'); $('#btnSound').textContent = '🔊'; } else sound.start();
@@ -291,13 +295,13 @@ function openDogModal() {
   const list = $('#breedList'); list.innerHTML = '';
   for (const b of BREEDS) {
     const el = document.createElement('button'); el.className = 'breed' + (b.id === pickBreed ? ' on' : ''); el.dataset.id = b.id;
-    el.innerHTML = `<i style="background:linear-gradient(135deg,${b.color} 55%,${b.color2} 55%)"><img src="assets/breeds/${b.id}.webp?v=39t" alt="" loading="eager" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('em'),{textContent:'🐶'}))"></i><b>${b.name}</b><small>${{ drop: '처진 귀', erect: '쫑긋 귀', big: '큰 귀', semi: '반 선 귀', button: '단추 귀', bat: '박쥐 귀' }[b.ear]} · ${(b.size||1) >= 1.1 ? '큰 개' : (b.size||1) <= .9 ? '작은 개' : '중간'}</small>`;
+    el.innerHTML = `<i style="background:linear-gradient(135deg,${b.color} 55%,${b.color2} 55%)"><img src="assets/breeds/${b.id}.webp?v=39v" alt="" loading="eager" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('em'),{textContent:'🐶'}))"></i><b>${b.name}</b><small>${{ drop: '처진 귀', erect: '쫑긋 귀', big: '큰 귀', semi: '반 선 귀', button: '단추 귀', bat: '박쥐 귀' }[b.ear]} · ${(b.size||1) >= 1.1 ? '큰 개' : (b.size||1) <= .9 ? '작은 개' : '중간'}</small>`;
     el.onclick = () => { pickBreed = b.id; setPrev(b); list.querySelectorAll('.breed').forEach(x => x.classList.toggle('on', x === el)); swapDog(b.id); };
     list.appendChild(el);
   }
   setPrev(BREEDS.find(b => b.id === pickBreed) || BREEDS[0]); openPanel('dogModal');
 }
-function setPrev(b) { const p = $('#dogPrev'); p.querySelector('img').src = `assets/breeds/${b.id}.webp?v=39t`; p.querySelector('b').textContent = b.name; } // v3.9g: 선택 강아지 미리보기(미리 캡처한 인게임 모델 이미지)
+function setPrev(b) { const p = $('#dogPrev'); p.querySelector('img').src = `assets/breeds/${b.id}.webp?v=39v`; p.querySelector('b').textContent = b.name; } // v3.9g: 선택 강아지 미리보기(미리 캡처한 인게임 모델 이미지)
 $('#dogOk').onclick = () => {
   dogName = ($('#dogName').value.trim() || '바다').slice(0, 8); LS.set('bw.dogName', dogName); LS.set('bw.breed', pickBreed); if (pickBreed !== breedId) swapDog(pickBreed); if (_srvUrl) netc.connect(helloMsg());
   openPanel(null); say(`나 · ${dogName}`, 3);

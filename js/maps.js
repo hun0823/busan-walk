@@ -1,15 +1,17 @@
 // 맵 레지스트리 + 걷기/높이 함수 파사드(현재 맵으로 교체되는 live binding)
 import * as THREE from 'three';
-import { buildWorld, isWalkable as bkWalk, heightAt as bkHeight } from './world.js?v=39t';
-import { buildGenWorld } from './world-gen.js?v=39t';
-export const MAPS = [
+import { buildWorld, isWalkable as bkWalk, heightAt as bkHeight } from './world.js?v=39v';
+import { buildGenWorld } from './world-gen.js?v=39v';
+// v3.9u: enabled:false 맵은 목록·지도·이동에서 숨김(코드·데이터·곡은 그대로 — true로 바꾸면 되살아남)
+export const ALL_MAPS = [
   { id: 'bukhang', name: '북항 친수공원', sub: '01', desc: '수로·다리·유리 데크' },
   { id: 'gwangalli', name: '광안리', sub: '02', desc: '해변 · 광안대교' },
   { id: 'hwangnyeong', name: '황령산', sub: '03', desc: '등산로 · 봉수대 전망' },
   { id: 'yonggungsa', name: '용궁사', sub: '04', desc: '바닷가 절 · 계단' },
-  { id: 'gamcheon', name: '감천문화마을', sub: '05', desc: '계단식 골목 · 색색 집' },
+  { id: 'gamcheon', name: '감천문화마을', sub: '05', desc: '계단식 골목 · 색색 집', enabled: false },
 ];
-export const mapById = id => MAPS.find(m => m.id === id);
+export const MAPS = ALL_MAPS.filter(m => m.enabled !== false);
+export const mapById = id => MAPS.find(m => m.id === id); // 비활성 맵 id는 undefined → 북항으로
 export let isWalkable = bkWalk, heightAt = bkHeight;
 const cache = {};
 export async function getWorld(id, scene) {

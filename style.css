@@ -161,3 +161,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0b1530;font-family:
  .top-left #title{font-size:12px!important}.top-left .srv{font-size:10px!important}}
 @media (max-width:370px){.top-right button,.top-right .tlbl{padding:0 4px!important}.top-left .srv{font-size:9.5px!important}}
 @media (min-width:641px){.glass.top-hint{top:var(--tbt)!important;height:var(--tbh)!important;box-sizing:border-box;display:flex;align-items:center;padding-top:0!important;padding-bottom:0!important;border-radius:14px!important}}.top-left .srv{border-left:1px solid rgba(255,255,255,.25)!important;border-radius:0!important}
+#btnBgm[hidden]{display:none!important}
+/* v3.9v 맵 이동 창: 부제목 표시 끔(데이터 desc는 유지), 한 줄 행 높이 */
+.mapmenu .nm small{display:none!important}.mapmenu button{min-height:44px}

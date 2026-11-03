@@ -1,6 +1,6 @@
 // v3.9l 꾸미기(가방): 모든 아이템은 Three.js 기본 도형으로 직접 만든 모델(외부 에셋 없음). 색·모양은 연출.
 import * as THREE from 'three';
-import { makeMat } from './mat.js?v=39t';
+import { makeMat } from './mat.js?v=39v';
 const M = (c, o = {}) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: .85, metalness: 0 }, o));
 const mesh = (g, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = true; return o; };
 const lathe = (pts, m, seg = 40) => new THREE.Mesh(new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg), m);

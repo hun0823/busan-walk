@@ -71,6 +71,15 @@ export class BgSound {
     clearTimeout(this._swT);
     this._swT = setTimeout(() => { this.playing = this.want; this.step = 0; this.bar = 0; const n = this.ctx.currentTime; this.music.gain.cancelScheduledValues(n); this.music.gain.setTargetAtTime(.8, n, .45); }, 1200);
   }
+  // v3.9u: 사용자 동작 안에서 호출 — 컨텍스트 생성·resume + 무음 버퍼 1개 재생(iOS 잠금 해제), 가능하면 무음 스위치 영향 줄이기(Safari 17+ audioSession)
+  unlock() {
+    if (this.muted) return;
+    try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch {}
+    if (!this.ctx) this.init();
+    const c = this.ctx; if (c.state !== 'running') c.resume?.().catch(() => {});
+    if (!this._blip) { try { const b = c.createBuffer(1, 1, c.sampleRate), s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(0); this._blip = true; } catch {} }
+    this.started = true; this.fade();
+  }
   start() { if (this.muted) return; if (!this.ctx) this.init(); this.ctx.resume(); this.started = true; this.fade(); }
   setMuted(m) { this.muted = m; if (!m) this.start(); else this.fade(); }
   fade() { if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : .18, this.ctx.currentTime, .8); }
