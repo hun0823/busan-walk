@@ -50,7 +50,7 @@ function draw(cv, id, D, me, top) {
 const topImg = {};
 function loadTop(id, renderTop) {
   return topImg[id] ??= (async () => {
-    try { const meta = await (await fetch(`data/top/${id}.json?v=39h`)).json(); const img = new Image(); img.decoding = 'async'; img.src = `data/top/${id}.webp?v=39h`; await img.decode(); return { img, pois: meta.pois || [] }; }
+    try { const meta = await (await fetch(`data/top/${id}.json?v=39i`)).json(); const img = new Image(); img.decoding = 'async'; img.src = `data/top/${id}.webp?v=39i`; await img.decode(); return { img, pois: meta.pois || [] }; }
     catch (e) { console.warn('top image', e); const D = await load(id), [bx0, by0, bx1, by1] = bbOf(id, D); return renderTop ? renderTop(id, { x0: bx0 * S, x1: bx1 * S, z0: -by1 * S, z1: -by0 * S }) : null; }
   })();
 }
