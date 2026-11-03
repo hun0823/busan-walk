@@ -15,15 +15,15 @@ const fin = (pts, depth = .06) => { const s = new THREE.Shape(pts.map(([a, b]) =
 // 몸통 지오메트리는 인스턴스 스케일(.55,.7,1.1)이 곱해지므로 단위 공간에서 만든다. +z가 머리.
 export function fishBodyGeo() {
   const body = new THREE.SphereGeometry(1, 16, 12); { const p = body.attributes.position; for (let i = 0; i < p.count; i++) { const z = p.getZ(i); const t = z < 0 ? 1 + z * .45 : 1 - z * z * .12; p.setX(i, p.getX(i) * .62 * t); p.setY(i, p.getY(i) * (z < 0 ? 1 + z * .35 : 1)); } } // 꼬리 쪽으로 가늘게
-  const belly = new THREE.Color(1.25, 1.25, 1.2), back = new THREE.Color(.78, .78, .8);
+  const belly = new THREE.Color(1.45, 1.48, 1.5), back = new THREE.Color(.72, .74, .8); // v3.9k: 은빛 배 더 밝게
   const bodyCol = (x, y) => new THREE.Color(1, 1, 1).lerp(y < 0 ? belly : back, Math.min(1, Math.abs(y) * 1.2));
-  const dorsal = fin([[.35, 0], [-.05, .75], [-.55, .55], [-.75, 0]], .05); dorsal.rotateY(-Math.PI / 2); dorsal.translate(0, .78, 0);
-  const pect = []; for (const sx of [-1, 1]) { const g = fin([[0, 0], [-.45, .18], [-.35, -.12]], .04); g.rotateX(Math.PI / 2); g.rotateY(sx * -Math.PI / 2 * .6); g.translate(sx * .55, -.25, .25); pect.push([g, 0xb8b8b8]); }
+  const dorsal = fin([[.4, 0], [-.05, .95], [-.6, .7], [-.8, 0]], .05); dorsal.rotateY(-Math.PI / 2); dorsal.translate(0, .78, 0);
+  const pect = []; for (const sx of [-1, 1]) { const g = fin([[0, 0], [-.6, .26], [-.5, -.16]], .04); g.rotateX(Math.PI / 2); g.rotateY(sx * -Math.PI / 2 * .6); g.translate(sx * .55, -.25, .25); pect.push([g, 0xb8b8b8]); }
   const eyes = []; for (const sx of [-1, 1]) { const w = new THREE.SphereGeometry(.17, 10, 8); w.translate(sx * .5, .22, .62); eyes.push([w, 0xffffff]); const e = new THREE.SphereGeometry(.11, 10, 8); e.translate(sx * .58, .23, .66); eyes.push([e, 0x101014]); }
   return merge([[body, bodyCol], [dorsal, 0xb0b0b0], ...pect, ...eyes]);
 }
 // 꼬리: 몸통 끝(z=0)에서 -z로 갈라진 꼬리지느러미(세로 판)
-export function fishTailGeo() { const g = fin([[0, .12], [-.95, .8], [-.62, 0], [-.95, -.8], [0, -.12]], .07); g.rotateY(-Math.PI / 2); return merge([[g, 0xd0d0d0]]); }
+export function fishTailGeo() { const g = fin([[0, .14], [-1.05, .95], [-.66, 0], [-1.05, -.95], [0, -.14]], .07); g.rotateY(-Math.PI / 2); return merge([[g, 0xd0d0d0]]); }
 
 // ---------- 감천 순환 코스(연출): 나무 데크 + 난간 + 어린왕자 조형 ----------
 export function addLoopDeck({ group, loopPts, rawH, C }) {

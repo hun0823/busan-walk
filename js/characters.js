@@ -92,7 +92,7 @@ export function makeGuardian() {
   }
   const hand = new THREE.Object3D(); hand.position.y = -.34; arms[0].add(hand); // 왼손 목줄
   shadow(root);
-  return { root, hand, animate(t, walk, sit) {
+  return { root, hand, body, arms, animate(t, walk, sit) {
     if (sit) { legs[0].rotation.x = legs[1].rotation.x = -1.45; arms[0].rotation.x = arms[1].rotation.x = -.35; body.position.y = -.36; body.rotation.z = 0; return; }
     const s = walk ? Math.sin(t * 9) : 0;
     legs[0].rotation.x = s * .55; legs[1].rotation.x = -s * .55;
@@ -194,7 +194,7 @@ export function makeDog(breed = {}) {
   else if (T === 'pom') { const st = new THREE.Mesh(new THREE.CapsuleGeometry(.03, .1, 4, 8), fur); st.rotation.x = -.5; st.position.set(0, .05, -.03); tail.add(st); const pm = new THREE.Mesh(puffGeo(.08, 20, .08, 12), fur); pm.position.set(0, .14, -.07); tail.add(pm); }
   else { const t = new THREE.Mesh(puffGeo(.1, 24, .08, 12), fur); t.scale.set(1, 1.1, 1.6); t.rotation.x = .9; t.position.set(0, .1, .02); tail.add(t); } // plume: 등 위 깃털
   shadow(root);
-  return { root, collar, breed: B, animate(t, st) {
+  return { root, collar, headG, breed: B, animate(t, st) {
     const f = st === 'run' ? 16 : 11, a = st === 'run' ? .7 : st === 'walk' ? .45 : 0;
     const s = Math.sin(t * f);
     legs[0].rotation.x = s * a; legs[3].rotation.x = s * a; legs[1].rotation.x = -s * a; legs[2].rotation.x = -s * a;

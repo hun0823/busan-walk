@@ -48,13 +48,13 @@ function draw(cv, id, D, me, top) {
 // v3.9g: 렉 수정 — 열 때마다 3D 탑뷰를 다시 렌더(6x 스로틀 2.3초 블록)하던 것을, 미리 캡처한 인게임 탑뷰 이미지(data/top/<id>.webp)로 교체.
 // 배경은 열 때·크기 바뀔 때 한 번만 그리고, 0.25초마다 내 위치 화살표만 덧그림. 현재 접속한 맵만 표시.
 const topImg = {};
-function loadTop(id, renderTop) {
+function loadTop(id, renderTop, shadeTop) {
   return topImg[id] ??= (async () => {
-    try { const meta = await (await fetch(`data/top/${id}.json?v=39j`)).json(); const img = new Image(); img.decoding = 'async'; img.src = `data/top/${id}.webp?v=39j`; await img.decode(); return { img, pois: meta.pois || [] }; }
+    try { const meta = await (await fetch(`data/top/${id}.json?v=39l`)).json(); const img = new Image(); img.decoding = 'async'; img.src = `data/top/${id}.webp?v=39l`; await img.decode(); let out = img; if (shadeTop) { try { const D = await load(id), [bx0, by0, bx1, by1] = bbOf(id, D); out = shadeTop(id, img, { x0: bx0 * S, x1: bx1 * S, z0: -by1 * S, z1: -by0 * S }); } catch (e2) { console.warn('shade', e2); } } return { img: out, pois: meta.pois || [] }; }
     catch (e) { console.warn('top image', e); const D = await load(id), [bx0, by0, bx1, by1] = bbOf(id, D); return renderTop ? renderTop(id, { x0: bx0 * S, x1: bx1 * S, z0: -by1 * S, z1: -by0 * S }) : null; }
   })();
 }
-export function initMapView({ renderTop, maps, getCur, getMe }) {
+export function initMapView({ renderTop, shadeTop, maps, getCur, getMe }) {
   const btn = document.createElement('button'); btn.id = 'btnMap'; btn.title = '지도 보기'; btn.textContent = '🗺️';
   document.querySelector('.top-right').insertBefore(btn, document.querySelector('#btnSound'));
   const pan = document.createElement('div'); pan.id = 'mapView'; pan.className = 'glass panel mapview';
@@ -78,7 +78,7 @@ export function initMapView({ renderTop, maps, getCur, getMe }) {
     const my = ++tok; id = getCur(); const m = maps.find(x => x.id === id); pan.querySelector('.mvname').textContent = m ? m.name : id;
     pan.querySelector('.mvnote').textContent = NOTE[id] || ''; base = null;
     const g = cv.getContext('2d'); cv.width = cv.clientWidth; cv.height = cv.clientHeight; g.fillStyle = '#3f8fb5'; g.fillRect(0, 0, cv.width, cv.height); g.fillStyle = '#fff'; g.font = '600 13px system-ui'; g.textAlign = 'center'; g.fillText('게임 맵 불러오는 중…', cv.width / 2, cv.height / 2);
-    D = await load(id); top = await loadTop(id, renderTop); if (my !== tok || !pan.classList.contains('open')) return; paintBase(); tick();
+    D = await load(id); top = await loadTop(id, renderTop, shadeTop); if (my !== tok || !pan.classList.contains('open')) return; paintBase(); tick();
   }
   const open = o => { pan.classList.toggle('open', o); clearInterval(timer); if (o) { show(); timer = setInterval(() => { if (id !== getCur()) show(); else tick(); }, 250); } };
   btn.onclick = () => open(!pan.classList.contains('open'));

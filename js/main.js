@@ -2,16 +2,17 @@
 // 모든 모델/텍스처/사운드는 Three.js 기본 도형과 절차 생성으로 직접 제작. (외부 에셋 없음)
 // 월드 배치는 실제 지도가 아니라 상상 구성(연출)이다. 요소 목록만 디자이너 전달 자료 기준.
 import * as THREE from 'three';
-import { S as MAP_SCALE } from './world.js?v=39j';
-import { MAPS, mapById, getWorld, setActive, isWalkable, heightAt } from './maps.js?v=39j';
-import { makeGuardian, makeDog } from './characters.js?v=39j';
-import { initMapView } from './mapview.js?v=39j';
-import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js?v=39j';
-import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js?v=39j';
-import { NetState, initNetStatus, NetClient, ANIM, SAY_TEXT } from './net.js?v=39j';
-import { SERVER_URL, NET } from './config.js?v=39j';
-import { makeMat } from './mat.js?v=39j';
-import { BgSound } from './sound.js?v=39j';
+import { S as MAP_SCALE } from './world.js?v=39l';
+import { MAPS, mapById, getWorld, setActive, isWalkable, heightAt } from './maps.js?v=39l';
+import { makeGuardian, makeDog } from './characters.js?v=39l';
+import { initMapView } from './mapview.js?v=39l';
+import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js?v=39l';
+import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js?v=39l';
+import { NetState, initNetStatus, NetClient, ANIM, SAY_TEXT } from './net.js?v=39l';
+import { SERVER_URL, NET } from './config.js?v=39l';
+import { makeMat } from './mat.js?v=39l';
+import { SLOTS, encode, decode, applyOutfit, makeGroundItem } from './outfit.js?v=39l';
+import { BgSound } from './sound.js?v=39l';
 
 const $ = s => document.querySelector(s);
 const setLoad = (p, t) => { $('#loadbar').style.width = p + '%'; if (t && window.__step) window.__step(t); };
@@ -58,7 +59,7 @@ const guardian = makeGuardian(); scene.add(guardian.root);
 const LS = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 let dogName = LS.get('bw.dogName') || '바다', breedId = LS.get('bw.breed') || DEFAULT_BREED;
 let dog = makeDog(breedById(breedId)); scene.add(dog.root);
-function swapDog(id) { const old = dog; dog = makeDog(breedById(id)); dog.root.position.copy(old.root.position); dog.root.rotation.y = old.root.rotation.y; scene.remove(old.root); scene.add(dog.root); breedId = id; }
+function swapDog(id) { const old = dog; dog = makeDog(breedById(id)); dog.root.position.copy(old.root.position); dog.root.rotation.y = old.root.rotation.y; scene.remove(old.root); scene.add(dog.root); breedId = id; applyOutfit(guardian, dog, outfit); }
 // 캐릭터 보조 라이트(약하게, 밤에도 칙칙하지 않게)
 const charFill = new THREE.PointLight(0xffe2c0, 1.2, 6, 1.5); scene.add(charFill);
 // v3.9j: 시작점에서 걸어서 닿는 영역(4방향 BFS, 0.3m 격자)을 한 번 계산해 캐시 → 무작위 시작/저장 위치가 건물 사이 고립 구역이면 버림
@@ -244,11 +245,29 @@ function startRest() {
   rest.dogSpot.set(spot.x - sx * .4, heightAt(spot.x, spot.z) + .03, spot.z - sz * .4);
   moveTarget = null; marker.visible = false; say(`${dogName}랑 잠깐 쉬어요`, 2.5);
 }
-function stopRest() { if (!rest.on) return; rest.on = false; rest.folding = 1; }
+function stopRest() { if (!rest.on) return;  rest.on = false; rest.folding = 1; }
 function updateRest(dt) {
   if (rest.on) { rest.t = Math.min(1, rest.t + dt / .5); mat.scale.set(rest.t, 1, .3 + .7 * rest.t); }
   else if (rest.folding > 0) { rest.folding = Math.max(0, rest.folding - dt / .4); mat.scale.set(rest.folding, 1, .3 + .7 * rest.folding); if (!rest.folding) mat.visible = false; }
 }
+
+// ---------- v3.9l 가방(꾸미기): 착용 상태는 localStorage(bw.outfit) ----------
+let outfit = {}; try { outfit = JSON.parse(LS.get('bw.outfit') || '{}') || {}; } catch (e) { outfit = {}; }
+const ground = {}; // 돗자리·캠핑의자: 보호자 옆에 놓임(내 화면에만)
+function placeGround(k) { const it = ground[k]; if (!it) return; const g = guardian.root, side = k === 'chair' ? -1 : 1;
+  for (const d of [1.3, 1.8, 2.4, 1]) for (const da of [0, .5, -.5, 1, -1]) { const r = g.rotation.y + Math.PI / 2 * side + da, x = g.position.x + Math.sin(r) * d, z = g.position.z + Math.cos(r) * d;
+    if (isWalkable(x, z) && (k !== 'mat' || matFits(x, z, g.rotation.y))) { it.position.set(x, heightAt(x, z) + .01, z); it.rotation.y = k === 'chair' ? g.rotation.y + Math.PI : g.rotation.y; it.visible = true; return; } }
+  it.visible = false; }
+function syncGround(reset) { for (const k of ['mat', 'chair']) { if (outfit[k] && !ground[k]) { ground[k] = makeGroundItem(k); scene.add(ground[k]); placeGround(k); }
+  if (!outfit[k] && ground[k]) { scene.remove(ground[k]); delete ground[k]; } if (reset && ground[k]) placeGround(k); } }
+function updateGround() { for (const k in ground) { const it = ground[k]; if (rest.on) { it.visible = false; continue; } if (!it.visible || it.position.distanceTo(guardian.root.position) > 30) placeGround(k); } }
+let _ofT = 0;
+function setOutfit(k, v) { if (v) outfit[k] = v; else delete outfit[k]; LS.set('bw.outfit', JSON.stringify(outfit)); applyOutfit(guardian, dog, outfit); syncGround(false); renderBag(); clearTimeout(_ofT); if (_srvUrl) _ofT = setTimeout(() => netc.connect(helloMsg()), 900); }
+function renderBag() { $('#bagList').innerHTML = SLOTS.map(s => `<div class="bslot"><h5>${s.name}</h5><div class="bitems"><button data-k="${s.k}" data-v="" class="${outfit[s.k] ? '' : 'on'}">✕ 없음</button>${s.items.map(([id, nm, em]) => `<button data-k="${s.k}" data-v="${id}" class="${outfit[s.k] === id ? 'on' : ''}"><span>${em}</span>${nm}</button>`).join('')}</div></div>`).join(''); }
+$('#bagList').onclick = e => { const b = e.target.closest('button[data-k]'); if (b) setOutfit(b.dataset.k, b.dataset.v); };
+$('#bagOff').onclick = () => { outfit = {}; setOutfit('x', ''); };
+$('#btnBag').onclick = () => { renderBag(); openPanel($('#bagPanel').classList.contains('open') ? null : 'bagPanel'); };
+applyOutfit(guardian, dog, outfit); syncGround(false);
 
 // ---------- 설정 · 정보 · 강아지 모달 ----------
 function openPanel(id) { document.querySelectorAll('.panel').forEach(p => p.classList.toggle('open', p.id === id)); }
@@ -262,13 +281,13 @@ function openDogModal() {
   const list = $('#breedList'); list.innerHTML = '';
   for (const b of BREEDS) {
     const el = document.createElement('button'); el.className = 'breed' + (b.id === pickBreed ? ' on' : ''); el.dataset.id = b.id;
-    el.innerHTML = `<i style="background:linear-gradient(135deg,${b.color} 55%,${b.color2} 55%)"><img src="assets/breeds/${b.id}.webp?v=39j" alt="" loading="eager" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('em'),{textContent:'🐶'}))"></i><b>${b.name}</b><small>${{ drop: '처진 귀', erect: '쫑긋 귀', big: '큰 귀', semi: '반 선 귀', button: '단추 귀', bat: '박쥐 귀' }[b.ear]} · ${(b.size||1) >= 1.1 ? '큰 개' : (b.size||1) <= .9 ? '작은 개' : '중간'}</small>`;
+    el.innerHTML = `<i style="background:linear-gradient(135deg,${b.color} 55%,${b.color2} 55%)"><img src="assets/breeds/${b.id}.webp?v=39l" alt="" loading="eager" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('em'),{textContent:'🐶'}))"></i><b>${b.name}</b><small>${{ drop: '처진 귀', erect: '쫑긋 귀', big: '큰 귀', semi: '반 선 귀', button: '단추 귀', bat: '박쥐 귀' }[b.ear]} · ${(b.size||1) >= 1.1 ? '큰 개' : (b.size||1) <= .9 ? '작은 개' : '중간'}</small>`;
     el.onclick = () => { pickBreed = b.id; setPrev(b); list.querySelectorAll('.breed').forEach(x => x.classList.toggle('on', x === el)); swapDog(b.id); };
     list.appendChild(el);
   }
   setPrev(BREEDS.find(b => b.id === pickBreed) || BREEDS[0]); openPanel('dogModal');
 }
-function setPrev(b) { const p = $('#dogPrev'); p.querySelector('img').src = `assets/breeds/${b.id}.webp?v=39j`; p.querySelector('b').textContent = b.name; } // v3.9g: 선택 강아지 미리보기(미리 캡처한 인게임 모델 이미지)
+function setPrev(b) { const p = $('#dogPrev'); p.querySelector('img').src = `assets/breeds/${b.id}.webp?v=39l`; p.querySelector('b').textContent = b.name; } // v3.9g: 선택 강아지 미리보기(미리 캡처한 인게임 모델 이미지)
 $('#dogOk').onclick = () => {
   dogName = ($('#dogName').value.trim() || '바다').slice(0, 8); LS.set('bw.dogName', dogName); LS.set('bw.breed', pickBreed); if (pickBreed !== breedId) swapDog(pickBreed); if (_srvUrl) netc.connect(helloMsg());
   openPanel(null); say(`나 · ${dogName}`, 3);
@@ -285,14 +304,14 @@ const others = new Map(); // id → {name,breed,dog,buf:[[t,x,z,r,a]],label,sayT
 const labelLayer = document.createElement('div'); labelLayer.id = 'otherLabels'; document.body.appendChild(labelLayer);
 const INTERP_MS = 150; // 보간 지연
 const dotGeo = new THREE.CircleGeometry(.35, 12).rotateX(-Math.PI / 2); // 멀리 있는(상세 표시 안 하는) 유저는 바닥 점으로 단순화
-function removeOther(id) { const o = others.get(id); if (!o) return; if (o.dog) scene.remove(o.dog.root); scene.remove(o.dot); o.label.remove(); o.bub?.remove(); others.delete(id); }
+function removeOther(id) { const o = others.get(id); if (!o) return; if (o.dog) scene.remove(o.dog.root); if (o.gd) scene.remove(o.gd.root); scene.remove(o.dot); o.label.remove(); o.bub?.remove(); others.delete(id); }
 let mapCounts = null;
 const netc = new NetClient(_srvUrl, NET, {
   onStatus: (st, n, no) => net.set(st === 'online' ? NetState.ONLINE : st === 'connecting' ? NetState.CONNECTING : st === 'error' ? NetState.ERROR : NetState.OFFLINE_SOLO, n || 1, no),
-  onJoin: (id, name, breed) => { if (others.has(id)) return; const b = breedById(breed) ? breed : DEFAULT_BREED;
+  onJoin: (id, name, breed0) => { if (others.has(id)) return; const [breed, oc] = String(breed0 || '').split('-o'); const b = BREEDS.some(x => x.id === breed) ? breed : DEFAULT_BREED;
     const dot = new THREE.Mesh(dotGeo, new THREE.MeshBasicMaterial({ color: breedById(b).color, transparent: true, opacity: .8 })); dot.visible = false; scene.add(dot);
     const label = document.createElement('div'); label.className = 'olabel'; label.textContent = name; labelLayer.appendChild(label);
-    others.set(id, { name, breed: b, dog: null, dot, buf: [], label, sayT: 0 }); },
+    others.set(id, { name, breed: b, outfit: decode(oc), dog: null, dot, buf: [], label, sayT: 0 }); },
   onState: (id, x, z, r, a) => { const o = others.get(id); if (!o) return; o.buf.push([performance.now(), x, z, r, a]); if (o.buf.length > 8) o.buf.shift(); },
   onLeave: removeOther,
   onSay: (id, k) => { const o = others.get(id); if (o && SAY_TEXT[k]) { if (!o.bub) { o.bub = document.createElement('div'); o.bub.className = 'bubble obub'; labelLayer.appendChild(o.bub); } o.bub.textContent = SAY_TEXT[k]; o.bub.style.display = ''; o.sayT = 2.5; } }, // v3.9i: 상대 인사 = 진짜 말풍선(서버 프리셋, 쿨다운은 서버 2.5초)
@@ -301,8 +320,8 @@ const netc = new NetClient(_srvUrl, NET, {
   onFix: (x, z) => { dog.root.position.set(x, heightAt(x, z), z); },
   onFull: m => toast(m.next ? `서버 ${String(m.no).padStart(2, '0')}이 가득 차서 ${String(m.next).padStart(2, '0')}번으로 들어가요` : '이 맵의 모든 서버가 가득 찼어요 · 혼자 플레이'),
 });
-const helloMsg = () => ({ map: curMap, name: dogName, breed: breedId, x: +dog.root.position.x.toFixed(1), z: +dog.root.position.z.toFixed(1), r: dog.root.rotation.y });
-let sendAcc = 0;
+const helloMsg = () => ({ map: curMap, name: dogName, breed: `${breedId}-o${encode(outfit)}`.slice(0, 24), x: +dog.root.position.x.toFixed(1), z: +dog.root.position.z.toFixed(1), r: dog.root.rotation.y });
+let sendAcc = 0; const _gv = new THREE.Vector3();
 function netFrame(dt, dogState) {
   if (!netc.online) { if (others.size) netc.cb.onReset(); return; }
   if ((sendAcc += dt) >= 1 / NET.sendHz) { sendAcc = 0; const p = dog.root.position; netc.send({ t: 's', x: +p.x.toFixed(2), z: +p.z.toFixed(2), r: +dog.root.rotation.y.toFixed(2), a: Math.max(0, ANIM.indexOf(dogState)) }); }
@@ -315,9 +334,14 @@ function netFrame(dt, dogState) {
     const x = p0[1] + (p1[1] - p0[1]) * u, z = p0[2] + (p1[2] - p0[2]) * u; let dr = p1[3] - p0[3]; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); const r = p0[3] + dr * u;
     const detail = i < MAX_DETAIL;
     if (detail && !o.dog) { o.dog = makeDog(breedById(o.breed)); scene.add(o.dog.root); }
+    if (detail && !o.gd) { o.gd = makeGuardian(); scene.add(o.gd.root); o.gp = null; applyOutfit(o.gd, o.dog, o.outfit || {}); } // v3.9l: 상대 착용(hello의 breed 뒤 '-o코드'로 전달, 서버 변경 없음) // v3.9k: 상대 보호자도 표시(서버는 강아지 위치만 보냄 → 보호자 위치는 강아지 앞 0.9m로 추정, 연출)
+    if (!detail && o.gd) { scene.remove(o.gd.root); o.gd = null; }
     if (!detail && o.dog) { scene.remove(o.dog.root); o.dog = null; } // 상세 한도 밖: 모델 제거하고 점으로
     const y = heightAt(x, z);
     if (o.dog) { o.dog.root.position.set(x, y, z); o.dog.root.rotation.y = r; o.dog.animate(time, ANIM[p1[4]] || 'idle'); }
+    if (o.gd) { const st = ANIM[p1[4]] || 'idle', mv = st === 'walk' || st === 'run'; let gx = x + Math.sin(r) * .9, gz = z + Math.cos(r) * .9; if (!isWalkable(gx, gz)) { gx = x + Math.cos(r) * .7; gz = z - Math.sin(r) * .7; if (!isWalkable(gx, gz)) { gx = x; gz = z; } }
+      if (!o.gp) o.gp = new THREE.Vector3(gx, 0, gz); else if (mv || o.gp.distanceTo(_gv.set(x, 0, z)) > 2.2) o.gp.lerp(_gv.set(gx, 0, gz), Math.min(1, dt * 5));
+      o.gd.root.position.set(o.gp.x, heightAt(o.gp.x, o.gp.z), o.gp.z); o.gd.root.rotation.y = r; o.gd.animate(time, mv, st === 'sit'); }
     o.dot.visible = !detail; if (!detail) o.dot.position.set(x, y + .05, z);
     if (o.sayT > 0 && (o.sayT -= dt) <= 0 && o.bub) o.bub.style.display = 'none';
     if (detail && o.d2 < 900) { _lp.set(x, y + 1.05, z).project(camera); const on = _lp.z < 1; o.label.style.display = on ? '' : 'none'; if (on) o.label.style.transform = `translate(${(_lp.x * .5 + .5) * innerWidth}px,${(-_lp.y * .5 + .5) * innerHeight}px) translate(-50%,-100%)`;  if (o.bub && o.sayT > 0) { _lp.set(x, y + 1.55, z).project(camera); o.bub.style.display = _lp.z < 1 ? '' : 'none'; o.bub.style.left = (_lp.x * .5 + .5) * innerWidth + 'px'; o.bub.style.top = (-_lp.y * .5 + .5) * innerHeight + 'px'; } }
@@ -389,7 +413,7 @@ function frame() {
     if (d < 0.15) { moveTarget = null; marker.visible = false; }
     else { walking = moveChar(g, tmp.normalize(), 4.0, dt); if (!walking) { moveTarget = null; marker.visible = false; } }
   }
-  guardian.animate(time, walking, rest.on);
+  guardian.animate(time, walking, rest.on); updateGround();
   marker.rotation.z += dt;
   // 강아지: 목줄 길이 안에서 보호자 옆을 따라감, 멀어지면 달려옴
   const dp = dog.root.position;
@@ -477,7 +501,7 @@ async function switchMap(id) {
     applyTime(cur, { scene, hemi, sun, renderer, world }); // 시간 위상·사운드는 그대로 이어짐
     sound.setNear(world.waterNear(s0.x, s0.z));
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    toast(`${mapById(id).name}에 도착했어요`); netc.closed = false; netc.cb.onReset(); netc.connect(helloMsg());
+    toast(`${mapById(id).name}에 도착했어요`); netc.closed = false; netc.cb.onReset(); syncGround(true); netc.connect(helloMsg());
   } catch (e) { console.warn('맵 이동 실패', e); fade.querySelector('small').textContent = '불러오기 실패'; await new Promise(r => setTimeout(r, 900)); }
   fade.classList.remove('on'); switching = false; return true;
 }
@@ -491,6 +515,13 @@ mapMenu.addEventListener('click', e => { e.stopPropagation(); const b = e.target
 mapMenu.addEventListener('pointerdown', e => e.stopPropagation());
 addEventListener('pointerdown', e => { if (mapMenu.classList.contains('open') && !e.target.closest('#mapMenu,#srv,#title')) closeMapMenu(); });
 // v3.9 지도 뷰어용 탑뷰: 실제 지도 대신 '게임 월드 그 자체'(땅·물·길·건물·나무 메시)를 정사영 카메라로 위에서 한 번 렌더해 맵별 캐시
+// v3.9k: 지도 탑뷰에서 시작점에서 걸어서 닿는 곳은 그대로(밝게), 못 가는 땅(건물·막힌 곳)은 살짝 어둡게. 물(파란 화소)은 그대로
+function shadeReach(w, g, cw, ch, R) {
+  const ok = reachOf(w), im = g.getImageData(0, 0, cw, ch), d = im.data, sx = (R.x1 - R.x0) / cw, sz = (R.z1 - R.z0) / ch;
+  for (let py = 0; py < ch; py++) { const z = R.z0 + (py + .5) * sz; for (let px = 0; px < cw; px++) { const i = (py * cw + px) * 4; if (d[i + 2] > d[i] + 25 && d[i + 2] > d[i + 1]) continue; if (ok(R.x0 + (px + .5) * sx, z)) continue; d[i] *= .7; d[i + 1] *= .7; d[i + 2] *= .74; } }
+  g.putImageData(im, 0, 0);
+}
+function shadeTop(id, img, R) { if (id !== curMap || !world) return img; const c = document.createElement('canvas'); c.width = img.naturalWidth || img.width; c.height = img.naturalHeight || img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0); shadeReach(world, g, c.width, c.height, R); return c; }
 const _topCache = {};
 async function renderTop(id, R) { // R: 월드 좌표 사각형 {x0,x1,z0,z1}
   const key = id + ':' + [R.x0, R.x1, R.z0, R.z1].map(v => v.toFixed(1)).join(','); if (_topCache[key]) return _topCache[key];
@@ -517,6 +548,7 @@ async function renderTop(id, R) { // R: 월드 좌표 사각형 {x0,x1,z0,z1}
     for (let i = 0; i < md.length; i += 4) if (md[i] > 45) { d[i] = 0xc4; d[i + 1] = 0xe0; d[i + 2] = 0xab; }
     g.putImageData(im, 0, 0); mats.forEach(o => o.visible = true); trees.forEach(t => t.visible = false);
   }
+  shadeReach(w, g, cw, ch, R);
   renderer.setPixelRatio(pr); renderer.setSize(sz.x, sz.y, false);
   hemi.color.setHex(keep.hc); hemi.groundColor.setHex(keep.hg); hemi.intensity = keep.hi; sun.color.setHex(keep.sc); sun.intensity = keep.si; renderer.toneMappingExposure = keep.ex; if (scene.fog) { scene.fog.near = keep.fn; scene.fog.far = keep.ff; } scene.background = keep.bg;
   for (const [o, mt] of swapped) o.material = mt; for (const o of trees) o.visible = true;
@@ -533,8 +565,8 @@ function renderDogThumb(id, px = 256) {
   renderer.render(sc, cam); const cv = document.createElement('canvas'); cv.width = cv.height = px; cv.getContext('2d').drawImage(renderer.domElement, 0, 0);
   renderer.setPixelRatio(pr); renderer.setSize(sz.x, sz.y, false); void bg; return cv.toDataURL('image/webp', .85);
 }
-const mapView = initMapView({ renderTop, maps: MAPS, getCur: () => curMap, getMe: () => ({ x: guardian.root.position.x, z: guardian.root.position.z, rot: guardian.root.rotation.y }) });
-window.__game = { renderTop, renderDogThumb, BREEDS, mapView, openMapMenu, switchMap,  sound, breedsGrid, lineup, setTime: k => setTime(k, true), say, startRest, stopRest, openDogModal, swapDog, get rest() { return rest.on; }, test: { setPos: (x, z, r) => { guardian.root.position.set(x, heightAt(x, z), z); dog.root.position.set(x + .8, heightAt(x + .8, z + .8), z + .8); if (r !== undefined) yaw = r; }, setYaw: v => { yaw = v; }, setCam: (y, p, d) => { yaw = y; pitch = p; dist = d; }, getCam: () => [yaw, pitch, dist], get dog() { return dog.root; }, guardian: guardian.root, moveChar, get isWalkable() { return isWalkable; }, get heightAt() { return heightAt; }, get world() { return world; }, reachOf, randStart, switchMap: id => switchMap(id), get map() { return curMap; }, get others() { return others; } } }; // test: tools/walktest.mjs 용
+const mapView = initMapView({ renderTop, shadeTop, maps: MAPS, getCur: () => curMap, getMe: () => ({ x: guardian.root.position.x, z: guardian.root.position.z, rot: guardian.root.rotation.y }) });
+window.__game = { setOutfit, get outfit() { return outfit; }, renderTop, renderDogThumb, BREEDS, mapView, openMapMenu, switchMap,  sound, breedsGrid, lineup, setTime: k => setTime(k, true), say, startRest, stopRest, openDogModal, swapDog, get rest() { return rest.on; }, test: { setPos: (x, z, r) => { guardian.root.position.set(x, heightAt(x, z), z); dog.root.position.set(x + .8, heightAt(x + .8, z + .8), z + .8); if (r !== undefined) yaw = r; }, setYaw: v => { yaw = v; }, setCam: (y, p, d) => { yaw = y; pitch = p; dist = d; }, getCam: () => [yaw, pitch, dist], get dog() { return dog.root; }, guardian: guardian.root, moveChar, get isWalkable() { return isWalkable; }, get heightAt() { return heightAt; }, get world() { return world; }, reachOf, randStart, switchMap: id => switchMap(id), get map() { return curMap; }, get others() { return others; } } }; // test: tools/walktest.mjs 용
 
 setLoad(100, '들어가는 중');
 frame();
