@@ -5,6 +5,7 @@
 // 데이터: 공원 경계·경관수로·보행로·잔디·다리 윤곽·도로·건물 윤곽·해안선(육지 판정)·일부 나무 점.
 // 연출(데이터에 없음): 건물 높이·색, 다리 높이·난간 디테일, 나무 대부분, 가로등, 팜파스, 먼 대교·섬 실루엣, 수로, 물고기·상어·항만 크레인·정박선 경관조명, 지형 평탄.
 import * as THREE from 'three';
+import { fishBodyGeo, fishTailGeo } from './v39g.js?v=39h';
 export const S = 0.3;
 const DATA = await (await fetch('data/bukhang.json')).json();
 const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: .85, metalness: 0, ...o });
@@ -434,14 +435,14 @@ export function buildWorld(scene) {
   const landRings = [...DATA.parkGround, ...DATA.outerGround].map(p => p[0].map(W));
   const isSea = (x, z) => !landRings.some(r => inRing(r, x, z));
   // 물고기: 몸통(둥근 구) + 꼬리(납작 원뿔) 두 InstancedMesh
-  const fishBodyG = new THREE.SphereGeometry(1, 10, 8); const fishTailG = new THREE.ConeGeometry(.55, .7, 4); fishTailG.rotateX(-Math.PI / 2); fishTailG.translate(0, 0, -.35); fishTailG.scale(.25, 1, 1);
+  const fishBodyG = fishBodyGeo(), fishTailG = fishTailGeo(); // v3.9g: 몸통·등/가슴지느러미·눈 + 갈라진 꼬리(연출, js/v39g.js)
   const fishCols = [0xff9a3c, 0xf3e6c8, 0x8fa7b8, 0xffc06a, 0xe8705a];
   const fish = [];
   for (let i = 0, tries = 0; fish.filter(f => f.canal).length < 60 && tries < 600; tries++) { const d = rnd() * clLen[clLen.length - 1], off = (rnd() - .5) * 2.2; const [x, z, tx, tz] = clAt(d); const fx = x - tz * off, fz = z + tx * off; if (!inCanal(fx, fz)) continue; fish.push({ canal: true, d0: d, off, span: 3 + rnd() * 5, sp: .25 + rnd() * .3, ph: rnd() * 6.28, sz: .16 + rnd() * .06, y: -.44 + rnd() * .06 }); }
   for (let k = 0, tries = 0; fish.length < 100 && tries < 400; tries++) { const x = B.x0 + rnd() * (B.x1 - B.x0 + 120) - 60, z = B.z0 + rnd() * (B.z1 - B.z0 + 120) - 60; if (!isSea(x, z) || !isSea(x + 6, z) || !isSea(x - 6, z) || !isSea(x, z + 6) || !isSea(x, z - 6)) continue; for (let j = 0; j < 8 && fish.length < 100; j++) fish.push({ canal: false, cx: x + (rnd() - .5) * 3, cz: z + (rnd() - .5) * 3, r: 3 + rnd() * 1.5, sp: .25 + rnd() * .1, ph: k * 2 + j * .35, sz: .32 + rnd() * .1, y: -1.35 - rnd() * .4 }); k++; }
   const fishBody = new THREE.InstancedMesh(fishBodyG, M(0xffffff, { roughness: .5 }), fish.length), fishTail = new THREE.InstancedMesh(fishTailG, M(0xffffff, { roughness: .6 }), fish.length);
   fish.forEach((f, i) => { const c = new THREE.Color(fishCols[i % fishCols.length]).offsetHSL(0, 0, (rnd() - .5) * .08); fishBody.setColorAt(i, c); fishTail.setColorAt(i, c.clone().multiplyScalar(.85)); f.ax = 0; f.az = 0; });
-  fishBody.frustumCulled = fishTail.frustumCulled = false; scene.add(fishBody, fishTail);
+  fishBody.material.vertexColors = fishTail.material.vertexColors = true; fishBody.frustumCulled = fishTail.frustumCulled = false; scene.add(fishBody, fishTail);
   const _o = new THREE.Object3D(), _t = new THREE.Object3D();
   // 상어(수로 1마리, 귀여운 둥근 형태)
   const shark = new THREE.Group(); { const top = M(0x7f9fb8, { roughness: .5 }), bel = M(0xf4f1ea, { roughness: .6 }), eye = M(0x1d1d24, { roughness: .3 });
@@ -458,7 +459,7 @@ export function buildWorld(scene) {
       if (gp) { const dx = x + f.ax - gp.x, dz = z + f.az - gp.z, dd = Math.hypot(dx, dz); const want = dd < 2.5 ? 1.6 : 0; f.ax += ((want ? dx / dd * want : 0) - f.ax) * Math.min(1, dt * 3); f.az += ((want ? dz / dd * want : 0) - f.az) * Math.min(1, dt * 3); } // 가까이 오면 살짝 피함
       if (f.canal && (f.ax || f.az) && !inCanalFast(x + f.ax, z + f.az)) { f.ax *= .5; f.az *= .5; }
       _o.position.set(x + f.ax, f.y + Math.sin(t * 2 + i) * .02, z + f.az); _o.rotation.set(0, Math.atan2(hx, hz), 0); _o.scale.set(f.sz * .55, f.sz * .7, f.sz * 1.1); _o.updateMatrix(); fishBody.setMatrixAt(i, _o.matrix);
-      _t.position.set(0, 0, -.9); _t.rotation.set(0, Math.sin(t * 9 + i) * .5, 0); _t.scale.set(1 / .55 * .55, 1, 1); _t.updateMatrix(); fishTail.setMatrixAt(i, _o.matrix.clone().multiply(_t.matrix)); });
+      _t.position.set(0, 0, -.82); _t.rotation.set(0, Math.sin(t * 9 + i) * .5, 0); _t.scale.set(1 / .55 * .55, 1, 1); _t.updateMatrix(); fishTail.setMatrixAt(i, _o.matrix.clone().multiply(_t.matrix)); });
     fishBody.instanceMatrix.needsUpdate = fishTail.instanceMatrix.needsUpdate = true;
     const u = Math.sin(t * .05); const dir = Math.cos(t * .05) >= 0 ? 1 : -1; const [sx, sz, tx, tz] = clAt(sharkD0 + u * 20); const so = Math.sin(t * .4) * .6;
     shark.position.set(sx - tz * so, -.43 + Math.sin(t * 1.3) * .02, sz + tx * so); shark.rotation.y = Math.atan2(tx * dir, tz * dir) + Math.sin(t * 2) * .06; shark.userData.tail.rotation.y = Math.sin(t * 4) * .45;

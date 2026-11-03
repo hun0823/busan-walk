@@ -5,7 +5,8 @@
 // 연출(데이터에 없음): 건물 높이(층수 없는 경우)·색, 감천 파스텔 색, 용궁사 전통 지붕 형태, 숲 나무 배치, 가로등, 광안대교 주탑·케이블 위치와 높이·조명, 하늘·별·달.
 // 다른 서비스(산사 등)의 코드·모델은 사용하지 않음. 모두 Three.js 기본 도형·캔버스 절차 생성.
 import * as THREE from 'three';
-import { addV39, templeRoof } from './v39.js?v=39f';
+import { addV39, templeRoof } from './v39.js?v=39h';
+import { addLoopDeck, addBeachDecor } from './v39g.js?v=39h';
 const S = 0.3;
 
 export const MAP_CFG = {
@@ -20,7 +21,7 @@ export const MAP_CFG = {
     start: { poi: '해동용궁사', off: 18 }, face: 'poi:해동용궁사', see: 'poi:해동용궁사', vantage: { poi: '해수관음상', dx: 22, dz: 32, look: '해동용궁사', fixed: true, cam: 8.5 }, goal: 'poi:해수관음상',
     poiFilter: p => p.n && ['temple', 'viewpoint'].includes(p.k) || ['해수관음상', '득남불'].includes(p.n), note: '해안선·계단·건물 윤곽은 OSM. 지붕 형태·색은 연출' },
   gamcheon: { name: '감천문화마을', vs: .14, pastel: true, forestWood: true, fogMul: 1.1,
-    start: { poi: '감천문화마을', off: 6, vista: 55 }, face: 'downhill', goal: 'poi:어린왕자상',
+    start: { poi: '감천문화마을', off: 6, vista: 55 }, face: 'downhill', goal: 'poi:어린왕자상', loop: { c: [-30, 16], toward: '어린왕자상', a: 27, b: 20 },
     poiFilter: p => p.n && ['attraction', 'artwork'].includes(p.k) && /[가-힣]/.test(p.n) && p.n !== '묘지위집', note: '골목·계단·건물 윤곽은 OSM. 집 색(파스텔)·층수는 연출' },
 };
 
@@ -39,6 +40,18 @@ export async function buildGenWorld(id, scene) {
   const B = { x0: bx0 * S, x1: bx1 * S, z0: -by1 * S, z1: -by0 * S };
   const WX = B.x1 - B.x0, WZ = B.z1 - B.z0;
   const W = ([x, y]) => [x * S, -y * S];
+  // v3.9g 감천 순환 산책 코스(연출): 마을 가운데를 두르는 닫힌 고리. 아랫길은 집들을 올려다보고, 윗길(어린왕자 조형 쪽)은 내려다봄.
+  // 위치·모양은 게임용 연출(실제 산책로 아님). 코스 폭과 겹치는 집 윤곽 일부는 생략.
+  let loopPts = null;
+  if (C.loop) { const L = C.loop, tp = D.pois.find(p => p.n === L.toward); const [tx, tz] = tp ? W([tp.x, tp.y]) : [L.c[0], L.c[1] - 1];
+    let ux = tx - L.c[0], uz = tz - L.c[1]; const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul; const vx = -uz, vz = ux;
+    loopPts = []; for (let k = 0; k < 220; k++) { const a = k / 220 * Math.PI * 2, wob = 1 + .07 * Math.sin(a * 3 + 1) + .04 * Math.sin(a * 5);
+      loopPts.push([L.c[0] + (ux * Math.cos(a) * L.a + vx * Math.sin(a) * L.b) * wob, L.c[1] + (uz * Math.cos(a) * L.a + vz * Math.sin(a) * L.b) * wob]); }
+    const near = (x, z, r) => loopPts.some(([px, pz]) => (px - x) ** 2 + (pz - z) ** 2 < r * r);
+    const inPoly = (r, x, z) => { let c = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [ax, az] = W(r[i]), [bx, bz] = W(r[j]); if ((az > z) !== (bz > z) && x < (bx - ax) * (z - az) / (bz - az) + ax) c = !c; } return c; };
+    const n0 = D.buildings.length; D.buildings = D.buildings.filter(b => !(b.p.some(q => { const [x, z] = W(q); return near(x, z, 1.9); }) || loopPts.some(([x, z], i) => i % 4 === 0 && inPoly(b.p, x, z))));
+    C._loopCut = n0 - D.buildings.length; C._loopApex = loopPts[0]; }
+  const loopRaw = loopPts && [...loopPts, loopPts[0]].map(([x, z]) => [x / S, -z / S]);
 
   // ---- 지형 높이: 33×33 DEM 격자 Catmull-Rom 보간 → (고도 - 기준) × vs ----
   const N = D.elev.n, EV = D.elev.v;
@@ -80,6 +93,7 @@ export async function buildGenWorld(id, scene) {
   for (const m of [D.plaza, D.beach, D.green]) wp.fill(m, '#fff');
   for (const p of D.paths) wp.line(p.p, pw(p), '#fff');
   for (const p of D.roads) wp.line(p.p, p.w * S + 1.2, '#fff');
+  if (loopRaw) wp.line(loopRaw, 2.6, '#fff');
   wg.globalCompositeOperation = 'destination-in'; wg.drawImage(landC, 0, 0); wg.globalCompositeOperation = 'source-over';
   for (const b of D.buildings) if (b.t !== 'roof') wp.poly(b.p, '#000');
   const walkPx = wg.getImageData(0, 0, GW, GH).data;
@@ -103,6 +117,7 @@ export async function buildGenWorld(id, scene) {
   for (const p of D.roads) tpnt.line(p.p, .25, '#f4f1e8', [2, 2.5]);
   for (const p of D.paths) tpnt.line(p.p, pw(p) + .5, C.forest ? '#a88d68' : '#cbbfa8');
   for (const p of D.paths) tpnt.line(p.p, pw(p), p.k === 'path' || p.k === 'track' ? (C.forest ? '#d2b98e' : '#e2d3b0') : '#efe6d4');
+  if (loopRaw) { tpnt.line(loopRaw, 2.7, '#a98c66'); tpnt.line(loopRaw, 2.2, '#c9a87a'); } // v3.9g 순환 코스 나무 데크 색(연출)
   for (const p of D.paths.filter(p => p.k === 'steps')) tpnt.line(p.p, pw(p), '#8a7f70', [.25, .45]); // 계단 디딤 줄무늬
   const groundTex = new THREE.CanvasTexture(tc); groundTex.colorSpace = THREE.SRGBColorSpace; groundTex.anisotropy = 8;
 
@@ -303,7 +318,9 @@ export async function buildGenWorld(id, scene) {
     if (bridgeMats.length && curT && curT.lamp > 1) { ledH = (t * .03) % 1; bridgeMats[0].emissive.setHSL(.5 + .2 * Math.sin(t * .2), .8, .55); } else if (bridgeMats.length) bridgeMats[0].emissive.set(0x7fd8ff);
   }
   await step('해변·야경 꾸미는 중');
+  if (loopPts) addLoopDeck({ group, loopPts, rawH, C });
   const v39 = addV39({ id, D, C, group, W, B, rawH, isLand, isWalkable, painter, tc, tg, TK, groundTex, sea, bridge: bridgeInfo, bridgeMats, hash });
+  if (id === 'gwangalli') addBeachDecor({ D, group, W, rawH, isWalkable, isLand, hash });
   const waterNear = (x, z) => { if (!D.coast) return 0; for (const [r, v] of [[3, .9], [10, .7], [22, .45], [40, .25]]) for (let a = 0; a < 8; a++) if (!isLand(x + Math.cos(a * .785) * r, z + Math.sin(a * .785) * r)) return v; return 0; };
 
   await step('시작 위치');

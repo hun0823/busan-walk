@@ -18,6 +18,7 @@ function bbOf(id, D) {
   for (const poly of rings([...D.parkGround, ...D.park])) for (const [x, y] of poly) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
   const m = 80; return [x0 - m, y0 - m, x1 + m, y1 + m];
 }
+export async function topRect(id) { const D = await load(id), [bx0, by0, bx1, by1] = bbOf(id, D); return { x0: bx0 * S, x1: bx1 * S, z0: -by1 * S, z1: -by0 * S }; }
 function draw(cv, id, D, me, top) {
   const dpr = Math.min(2, devicePixelRatio || 1), W = cv.clientWidth, H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr;
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -44,25 +45,44 @@ function draw(cv, id, D, me, top) {
     g.restore();
   }
 }
+// v3.9g: 렉 수정 — 열 때마다 3D 탑뷰를 다시 렌더(6x 스로틀 2.3초 블록)하던 것을, 미리 캡처한 인게임 탑뷰 이미지(data/top/<id>.webp)로 교체.
+// 배경은 열 때·크기 바뀔 때 한 번만 그리고, 0.25초마다 내 위치 화살표만 덧그림. 현재 접속한 맵만 표시.
+const topImg = {};
+function loadTop(id, renderTop) {
+  return topImg[id] ??= (async () => {
+    try { const meta = await (await fetch(`data/top/${id}.json?v=39h`)).json(); const img = new Image(); img.decoding = 'async'; img.src = `data/top/${id}.webp?v=39h`; await img.decode(); return { img, pois: meta.pois || [] }; }
+    catch (e) { console.warn('top image', e); const D = await load(id), [bx0, by0, bx1, by1] = bbOf(id, D); return renderTop ? renderTop(id, { x0: bx0 * S, x1: bx1 * S, z0: -by1 * S, z1: -by0 * S }) : null; }
+  })();
+}
 export function initMapView({ renderTop, maps, getCur, getMe }) {
   const btn = document.createElement('button'); btn.id = 'btnMap'; btn.title = '지도 보기'; btn.textContent = '🗺️';
   document.querySelector('.top-right').insertBefore(btn, document.querySelector('#btnSound'));
   const pan = document.createElement('div'); pan.id = 'mapView'; pan.className = 'glass panel mapview';
-  pan.innerHTML = `<div class="mvh"><b>게임 맵</b><button class="mvx" title="닫기">✕</button></div><div class="mvtabs">${maps.map(m => `<button data-id="${m.id}">${m.name}</button>`).join('')}</div><div class="mvwrap"><canvas></canvas><div class="mvlg"><span class="me">▲ 내 위치·방향</span></div></div><p class="mvnote"></p><p class="mvsrc">지도 © OpenStreetMap contributors (ODbL) · 고도 음영 Copernicus DEM(Open-Meteo)</p>`;
+  pan.innerHTML = `<div class="mvh"><b>게임 맵 · <span class="mvname"></span></b><button class="mvx" title="닫기">✕</button></div><div class="mvwrap"><canvas></canvas><div class="mvlg"><span class="me">▲ 내 위치·방향</span></div></div><p class="mvnote"></p>`;
   document.body.appendChild(pan);
-  const cv = pan.querySelector('canvas'); let tab = null, timer = 0;
-  async function show(id) {
-    tab = id; pan.querySelectorAll('.mvtabs button').forEach(b => b.classList.toggle('on', b.dataset.id === id));
-    const here = id === getCur(); pan.querySelector('.mvlg').style.display = here ? '' : 'none';
-    pan.querySelector('.mvnote').textContent = (here ? '' : '다른 맵: 지도만 표시(내 위치 없음) · ') + NOTE[id];
-    const D = await load(id); if (tab !== id) return; const [bx0, by0, bx1, by1] = bbOf(id, D);
-    let top = null; try { top = renderTop ? await renderTop(id, { x0: bx0 * S, x1: bx1 * S, z0: -by1 * S, z1: -by0 * S }) : null; } catch (e) { console.warn('top view', e); }
-    if (tab !== id) return; draw(cv, id, D, here ? getMe() : null, top);
+  const cv = pan.querySelector('canvas'); let timer = 0, tok = 0, base = null, D = null, top = null, id = null;
+  function paintBase() { // 배경(이미지·라벨·축척)을 오프스크린에 한 번
+    const dpr = Math.min(2, devicePixelRatio || 1), W = cv.clientWidth, H = cv.clientHeight; if (!W || !H) return;
+    cv.width = W * dpr; cv.height = H * dpr; base = document.createElement('canvas'); base.width = cv.width; base.height = cv.height; base.clientWidth0 = W;
+    const fake = { clientWidth: W, clientHeight: H, set width(v) {}, set height(v) {}, getContext: () => base.getContext('2d') };
+    draw(fake, id, D, null, top);
   }
-  const open = o => { pan.classList.toggle('open', o); clearInterval(timer); if (o) { show(getCur()); timer = setInterval(() => { if (tab === getCur()) show(tab); }, 500); } };
+  function tick() { if (!base) return; const g = cv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(base, 0, 0); drawMe(g, getMe()); }
+  function drawMe(g, me) {
+    const dpr = cv.width / cv.clientWidth, W = cv.clientWidth, H = cv.clientHeight, [bx0, by0, bx1, by1] = bbOf(id, D), k = Math.min(W / (bx1 - bx0), H / (by1 - by0)), ox = (W - (bx1 - bx0) * k) / 2, oy = (H - (by1 - by0) * k) / 2;
+    const a = ox + (me.x / S - bx0) * k, b = oy + (by1 + me.z / S) * k; g.setTransform(dpr, 0, 0, dpr, 0, 0); g.save(); g.translate(a, b); g.rotate(Math.atan2(Math.cos(me.rot), Math.sin(me.rot)) - Math.PI / 2);
+    g.fillStyle = 'rgba(240,122,42,.25)'; g.beginPath(); g.arc(0, 0, 16, 0, 7); g.fill();
+    g.fillStyle = '#f07a2a'; g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, 12); g.lineTo(8, -7); g.lineTo(0, -3); g.lineTo(-8, -7); g.closePath(); g.fill(); g.stroke(); g.restore();
+  }
+  async function show() {
+    const my = ++tok; id = getCur(); const m = maps.find(x => x.id === id); pan.querySelector('.mvname').textContent = m ? m.name : id;
+    pan.querySelector('.mvnote').textContent = NOTE[id] || ''; base = null;
+    const g = cv.getContext('2d'); cv.width = cv.clientWidth; cv.height = cv.clientHeight; g.fillStyle = '#3f8fb5'; g.fillRect(0, 0, cv.width, cv.height); g.fillStyle = '#fff'; g.font = '600 13px system-ui'; g.textAlign = 'center'; g.fillText('게임 맵 불러오는 중…', cv.width / 2, cv.height / 2);
+    D = await load(id); top = await loadTop(id, renderTop); if (my !== tok || !pan.classList.contains('open')) return; paintBase(); tick();
+  }
+  const open = o => { pan.classList.toggle('open', o); clearInterval(timer); if (o) { show(); timer = setInterval(() => { if (id !== getCur()) show(); else tick(); }, 250); } };
   btn.onclick = () => open(!pan.classList.contains('open'));
   pan.querySelector('.mvx').onclick = () => open(false);
-  pan.querySelectorAll('.mvtabs button').forEach(b => b.onclick = () => show(b.dataset.id));
-  addEventListener('resize', () => { if (pan.classList.contains('open')) show(tab); });
+  addEventListener('resize', () => { if (pan.classList.contains('open') && D) { paintBase(); tick(); } });
   return { open, show, get isOpen() { return pan.classList.contains('open'); } };
 }

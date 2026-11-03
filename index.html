@@ -2,14 +2,14 @@
 <html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>부산 산책 | 북항 친수공원</title>
-<link rel="stylesheet" href="style.css?v=39f">
+<link rel="stylesheet" href="style.css?v=39h">
 <link rel="icon" href="data:,">
 <script>/* v3.9d: 로딩 단계 문구 */ window.__steps=[];window.__step=function(t){__steps.push([Math.round(performance.now()),t]);var l=document.querySelector('#loading p');if(l)l.textContent='산책 준비 중… '+t;};
 /* v3.9c: 로딩 중 오류를 로딩 화면에 표시(멈춘 진행바 대신) */
 window.__loadErr=function(m,soft){var l=document.getElementById('loading');if(!l||l.style.display==='none'||l.classList.contains('hide'))return;var p=document.getElementById('loaderr');if(!p){p=document.createElement('p');p.id='loaderr';p.style.cssText='color:#c0392b;font-size:12px;max-width:80vw;margin:8px auto 0;word-break:break-all';l.appendChild(p);}p.textContent=(soft?'':'오류: ')+String(m).slice(0,160)+(soft?'':' · 새로고침해 주세요');};
 addEventListener('error',function(e){__loadErr(e.message||'스크립트 오류');});addEventListener('unhandledrejection',function(e){__loadErr((e.reason&&e.reason.message)||e.reason||'불러오기 실패');});
 if(!(HTMLScriptElement.supports&&HTMLScriptElement.supports('importmap')))addEventListener('DOMContentLoaded',function(){__loadErr('이 브라우저는 importmap을 지원하지 않습니다(Safari 16.4 이상 필요)');});</script>
-<script type="importmap">{"imports":{"three":"./vendor/three.module.js?v=39f"}}</script>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js?v=39h"}}</script>
 <style>body.topview .glass,body.topview .bubble{display:none!important}</style></head><body>
 <div id="loading"><img src="assets/210lab-logo-clean.png" alt="210LAB"><div class="bar"><i id="loadbar"></i></div><p>산책 준비 중…</p></div>
 <div id="app"></div>
@@ -23,12 +23,13 @@ if(!(HTMLScriptElement.supports&&HTMLScriptElement.supports('importmap')))addEve
   <button id="btnSet" title="설정·정보">⚙️</button>
 </div>
 <div id="setPanel" class="glass panel menu"><button id="btnDog">🐶 강아지 이름·견종</button><button id="btnInfo">ⓘ 지도·연출 정보</button></div>
-<div id="infoPanel" class="glass panel card"><h3>지도·연출 정보</h3><p>Map data © OpenStreetMap contributors (ODbL) · 지도 축척 0.3배 · 해안선·부두 육지는 OSM(map.osm)</p><p>연출(실제와 다름): 건물 높이·나무·관목·가로등·야생화·풀포기·먼 풍경·부산항대교(북항대교) 크기·거리·다리 난간·조명·아치·물고기·상어·항만 크레인·배·유리 바닥 데크·달·별·돗자리</p><p>WASD/방향키 이동 · 바닥 클릭 이동</p><button data-close>닫기</button></div>
-<div id="dogModal" class="glass panel card dog"><h3>우리 강아지</h3><label>이름 <input id="dogName" maxlength="8" placeholder="바다"></label><div id="breedList"></div><button id="dogOk" class="ok">정했어요</button></div>
+<div id="infoPanel" class="glass panel card"><h3>지도·연출 정보</h3><p>지도 데이터 © OpenStreetMap contributors (ODbL) · 고도 Copernicus DEM(Open-Meteo) · Map data © OpenStreetMap contributors (ODbL) · 지도 축척 0.3배 · 해안선·부두 육지는 OSM(map.osm)</p><p>연출(실제와 다름): 건물 높이·나무·관목·가로등·야생화·풀포기·먼 풍경·부산항대교(북항대교) 크기·거리·다리 난간·조명·아치·물고기·상어·항만 크레인·배·유리 바닥 데크·달·별·돗자리</p><p>WASD/방향키 이동 · 바닥 클릭 이동</p><button data-close>닫기</button></div>
+<div id="dogModal" class="glass panel card dog"><h3>우리 강아지</h3><div id="dogPrev"><img alt="선택한 강아지"><b></b></div><label>이름 <input id="dogName" maxlength="8" placeholder="바다"></label><div id="breedList"></div><button id="dogOk" class="ok">정했어요</button></div>
 <div id="adminPanel" class="glass panel card admin"><h3>관리자</h3><div class="row"><button data-ph="morning">🌅 아침</button><button data-ph="noon">☀️ 점심</button><button data-ph="evening">🌇 저녁</button><button data-ph="auto">자동</button></div><button id="admPause">자동 순환 일시정지</button><button id="admDrone">🛸 드론쇼 시작</button><p id="admState"></p><button id="admClose">닫기</button></div>
 <div id="toast" class="glass toast hidden"></div>
 <div id="bubble" class="bubble hidden">멍!</div>
 <div class="glass bottom-bar">
+  <button data-act="hi"><span>👋</span>인사하기</button>
   <button data-act="pet"><span>🐾</span>쓰다듬기</button>
   <button data-act="treat"><span>🦴</span>간식</button>
   <button data-act="sit"><span>🐕</span>앉아</button>
@@ -36,6 +37,6 @@ if(!(HTMLScriptElement.supports&&HTMLScriptElement.supports('importmap')))addEve
   <button data-act="photo"><span>📷</span>사진</button>
 </div>
 <div id="flash"></div>
-<div class="note">© OpenStreetMap contributors (ODbL) · 고도 Copernicus DEM(Open-Meteo) · 일부 연출 ⓘ</div>
-<script type="module" src="js/main.js?v=39f"></script>
+<div class="note">일부 연출 · 지도 출처는 ⚙️ › ⓘ</div>
+<script type="module" src="js/main.js?v=39h"></script>
 </body></html>

@@ -2,16 +2,16 @@
 // 모든 모델/텍스처/사운드는 Three.js 기본 도형과 절차 생성으로 직접 제작. (외부 에셋 없음)
 // 월드 배치는 실제 지도가 아니라 상상 구성(연출)이다. 요소 목록만 디자이너 전달 자료 기준.
 import * as THREE from 'three';
-import { S as MAP_SCALE } from './world.js?v=39f';
-import { MAPS, mapById, getWorld, setActive, isWalkable, heightAt } from './maps.js?v=39f';
-import { makeGuardian, makeDog } from './characters.js?v=39f';
-import { initMapView } from './mapview.js?v=39f';
-import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js?v=39f';
-import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js?v=39f';
-import { NetState, initNetStatus, NetClient, ANIM, SAY_TEXT } from './net.js?v=39f';
-import { SERVER_URL, NET } from './config.js?v=39f';
-import { makeMat } from './mat.js?v=39f';
-import { BgSound } from './sound.js?v=39f';
+import { S as MAP_SCALE } from './world.js?v=39h';
+import { MAPS, mapById, getWorld, setActive, isWalkable, heightAt } from './maps.js?v=39h';
+import { makeGuardian, makeDog } from './characters.js?v=39h';
+import { initMapView } from './mapview.js?v=39h';
+import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js?v=39h';
+import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js?v=39h';
+import { NetState, initNetStatus, NetClient, ANIM, SAY_TEXT } from './net.js?v=39h';
+import { SERVER_URL, NET } from './config.js?v=39h';
+import { makeMat } from './mat.js?v=39h';
+import { BgSound } from './sound.js?v=39h';
 
 const $ = s => document.querySelector(s);
 const setLoad = (p, t) => { $('#loadbar').style.width = p + '%'; if (t && window.__step) window.__step(t); };
@@ -154,7 +154,7 @@ cv.addEventListener('pointermove', e => {
     const [a, b] = [...pointers.values()];
     p.x = e.clientX; p.y = e.clientY;
     const d = Math.hypot(a.x - b.x, a.y - b.y);
-    if (pinchD) dist = THREE.MathUtils.clamp(dist * pinchD / d, 2.6, 12);
+    if (pinchD) dist = THREE.MathUtils.clamp(dist * pinchD / d, 2.6, 15);
     pinchD = d; dragMoved = 99; return;
   }
   const dx = e.clientX - p.x, dy = e.clientY - p.y;
@@ -167,7 +167,7 @@ const up = e => {
   pointers.delete(e.pointerId); if (pointers.size < 2) pinchD = 0;
 };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-cv.addEventListener('wheel', e => { e.preventDefault(); dist = THREE.MathUtils.clamp(dist * (1 + Math.sign(e.deltaY) * 0.1), 2.6, 12); }, { passive: false });
+cv.addEventListener('wheel', e => { e.preventDefault(); dist = THREE.MathUtils.clamp(dist * (1 + Math.sign(e.deltaY) * 0.1), 2.6, 15); }, { passive: false });
 
 function clickGround(x, y) {
   ndc.set(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1);
@@ -186,8 +186,8 @@ addEventListener('keyup', e => { keys[e.code] = false; });
 // ---------- UI ----------
 let toastT;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.remove('hidden'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.add('hidden'), 1800); }
-let bubbleT = 0;
-function say(msg, sec = 2) { $('#bubble').textContent = msg; $('#bubble').classList.remove('hidden'); bubbleT = sec; }
+let bubbleT = 0, bubbleOn = 'dog';
+function say(msg, sec = 2, on = 'dog') { bubbleOn = on; $('#bubble').textContent = msg; $('#bubble').classList.remove('hidden'); bubbleT = sec; }
 let dogAction = null, actionT = 0;
 const hearts = [];
 function spawnHearts(char, color) {
@@ -199,6 +199,7 @@ function spawnHearts(char, color) {
     sp.userData = { life: 1.4, vy: .6 + Math.random() * .5 }; scene.add(sp); hearts.push(sp);
   }
 }
+let lastHi = -1e9;
 document.querySelectorAll('.bottom-bar button').forEach(b => b.onclick = () => {
   const a = b.dataset.act;
   if (a === 'pet') { dogAction = 'pet'; actionT = 1.6; say('헤헤, 좋아요!'); spawnHearts('❤', 0xffffff); }
@@ -206,6 +207,7 @@ document.querySelectorAll('.bottom-bar button').forEach(b => b.onclick = () => {
   if (a === 'sit') { dogAction = 'sit'; actionT = 3; say('앉았어요!'); }
   if (a === 'photo') takePhoto();
   if (a === 'rest') rest.on ? stopRest() : startRest();
+  if (a === 'hi') { const n = performance.now(); if (n - lastHi < 2500) return; lastHi = n; say('안녕! 👋', 2.5, 'me'); } // v3.9g 인사하기: 내 머리 위 말풍선 + 서버 프리셋 'hi'(2.5초 쿨다운 동일)
   if (SAY_OF[a]) netc.send({ t: 'say', k: SAY_OF[a] });
 });
 function takePhoto() {
@@ -255,12 +257,13 @@ function openDogModal() {
   const list = $('#breedList'); list.innerHTML = '';
   for (const b of BREEDS) {
     const el = document.createElement('button'); el.className = 'breed' + (b.id === pickBreed ? ' on' : ''); el.dataset.id = b.id;
-    el.innerHTML = `<i style="background:linear-gradient(135deg,${b.color} 55%,${b.color2} 55%)"></i><b>${b.name}</b><small>${{ drop: '처진 귀', erect: '쫑긋 귀', big: '큰 귀', semi: '반 선 귀', button: '단추 귀', bat: '박쥐 귀' }[b.ear]} · ${(b.size||1) >= 1.1 ? '큰 개' : (b.size||1) <= .9 ? '작은 개' : '중간'}</small>`;
-    el.onclick = () => { pickBreed = b.id; list.querySelectorAll('.breed').forEach(x => x.classList.toggle('on', x === el)); swapDog(b.id); };
+    el.innerHTML = `<i style="background:linear-gradient(135deg,${b.color} 55%,${b.color2} 55%)"><img src="assets/breeds/${b.id}.webp?v=39h" alt="" loading="lazy" onerror="this.remove()"></i><b>${b.name}</b><small>${{ drop: '처진 귀', erect: '쫑긋 귀', big: '큰 귀', semi: '반 선 귀', button: '단추 귀', bat: '박쥐 귀' }[b.ear]} · ${(b.size||1) >= 1.1 ? '큰 개' : (b.size||1) <= .9 ? '작은 개' : '중간'}</small>`;
+    el.onclick = () => { pickBreed = b.id; setPrev(b); list.querySelectorAll('.breed').forEach(x => x.classList.toggle('on', x === el)); swapDog(b.id); };
     list.appendChild(el);
   }
-  openPanel('dogModal');
+  setPrev(BREEDS.find(b => b.id === pickBreed) || BREEDS[0]); openPanel('dogModal');
 }
+function setPrev(b) { const p = $('#dogPrev'); p.querySelector('img').src = `assets/breeds/${b.id}.webp?v=39h`; p.querySelector('b').textContent = b.name; } // v3.9g: 선택 강아지 미리보기(미리 캡처한 인게임 모델 이미지)
 $('#dogOk').onclick = () => {
   dogName = ($('#dogName').value.trim() || '바다').slice(0, 8); LS.set('bw.dogName', dogName); LS.set('bw.breed', pickBreed); if (pickBreed !== breedId) swapDog(pickBreed); if (_srvUrl) netc.connect(helloMsg());
   openPanel(null); say(`나 · ${dogName}`, 3);
@@ -318,7 +321,7 @@ function netFrame(dt, dogState) {
 }
 const _lp = new THREE.Vector3();
 setTimeout(() => netc.connect(helloMsg()), 0); // 로딩과 분리
-const SAY_OF = { pet: 'pet', treat: 'treat', photo: 'photo', rest: 'rest', sit: 'woof' };
+const SAY_OF = { hi: 'hi', pet: 'pet', treat: 'treat', photo: 'photo', rest: 'rest', sit: 'woof' };
 window.__net = { netc, others, get detail() { return MAX_DETAIL; } };
 
 // ---------- 관리자 모드(숨김) ----------
@@ -423,11 +426,11 @@ function frame() {
   // 말풍선 위치
   if (bubbleT > 0) {
     bubbleT -= dt;
-    const p = dog.root.position.clone(); p.y += 1.25; p.project(camera);
+    const p = bubbleOn === 'me' ? guardian.root.position.clone().setY(guardian.root.position.y + 1.9) : dog.root.position.clone().setY(dog.root.position.y + 1.25); p.project(camera);
     const b = $('#bubble'); const bw = b.offsetWidth || 0; b.style.left = Math.min(innerWidth - bw / 2 - 8, Math.max(bw / 2 + 8, (p.x * .5 + .5) * innerWidth)) + 'px'; b.style.top = (-p.y * .5 + .5) * innerHeight + 'px';
     if (bubbleT <= 0) b.classList.add('hidden');
   }
-  renderer.render(scene, camera);
+  if (!window.__game?.mapView?.isOpen) renderer.render(scene, camera); // v3.9g: 지도 열림 중엔 3D 렌더 생략(위치·네트워크 갱신은 계속)
   window.__perf.frames++; window.__perf.total += performance.now() - t0;
   requestAnimationFrame(frame);
 }
@@ -476,10 +479,11 @@ const mapMenu = $('#mapMenu');
 function renderMapMenu() { mapMenu.querySelector('.list').innerHTML = MAPS.map(m => `<button data-map="${m.id}" class="${m.id === curMap ? 'cur' : ''}"><span class="no">${m.sub}</span><span class="nm">${m.name}<small>${m.desc}</small></span>${mapCounts ? `<i class="cnt">${mapCounts[m.id] || 0}명</i>` : ''}${m.id === curMap ? '<em>현재</em>' : ''}</button>`).join(''); }
 function openMapMenu() { renderMapMenu(); mapMenu.classList.add('open'); }
 function closeMapMenu() { mapMenu.classList.remove('open'); }
+$('#title').addEventListener('click', e => { e.stopPropagation(); mapMenu.classList.contains('open') ? closeMapMenu() : openMapMenu(); }); // v3.9g: 상단 맵 이름 눌러도 맵 선택
 $('#srv').addEventListener('click', e => { e.stopPropagation(); mapMenu.classList.contains('open') ? closeMapMenu() : openMapMenu(); });
 mapMenu.addEventListener('click', e => { e.stopPropagation(); const b = e.target.closest('[data-map]'); if (b) switchMap(b.dataset.map); });
 mapMenu.addEventListener('pointerdown', e => e.stopPropagation());
-addEventListener('pointerdown', e => { if (mapMenu.classList.contains('open') && !e.target.closest('#mapMenu,#srv')) closeMapMenu(); });
+addEventListener('pointerdown', e => { if (mapMenu.classList.contains('open') && !e.target.closest('#mapMenu,#srv,#title')) closeMapMenu(); });
 // v3.9 지도 뷰어용 탑뷰: 실제 지도 대신 '게임 월드 그 자체'(땅·물·길·건물·나무 메시)를 정사영 카메라로 위에서 한 번 렌더해 맵별 캐시
 const _topCache = {};
 async function renderTop(id, R) { // R: 월드 좌표 사각형 {x0,x1,z0,z1}
@@ -513,8 +517,18 @@ async function renderTop(id, R) { // R: 월드 좌표 사각형 {x0,x1,z0,z1}
   for (const [o, v] of vis) o.visible = v; for (const o of hidden) o.visible = true;
   return _topCache[key] = { img: c, pois: w.pois || [] };
 }
+// v3.9g: 견종 미리보기 이미지 생성(도구용) — assets/breeds/<id>.webp 로 미리 캡처해 두고 게임은 이미지만 씀
+function renderDogThumb(id, px = 256) {
+  const b = BREEDS.find(x => x.id === id); const sc = new THREE.Scene(); const d = makeDog(b); d.root.rotation.y = -0.6; sc.add(d.root);
+  sc.add(new THREE.HemisphereLight(0xffffff, 0xcbbca8, 2.2)); const L = new THREE.DirectionalLight(0xffffff, 1.6); L.position.set(2, 4, 3); sc.add(L);
+  d.animate && d.animate(0, 'idle'); const bx = new THREE.Box3().setFromObject(d.root), c = bx.getCenter(new THREE.Vector3()), r = bx.getSize(new THREE.Vector3()).length() * .62;
+  const cam = new THREE.PerspectiveCamera(30, 1, .01, 100); cam.position.set(c.x + r * .35, c.y + r * .9, c.z + r * 1.9); cam.lookAt(c);
+  const sz = renderer.getSize(new THREE.Vector2()), pr = renderer.getPixelRatio(), bg = scene.background; renderer.setPixelRatio(1); renderer.setSize(px, px, false); renderer.setClearColor(0x000000, 0);
+  renderer.render(sc, cam); const cv = document.createElement('canvas'); cv.width = cv.height = px; cv.getContext('2d').drawImage(renderer.domElement, 0, 0);
+  renderer.setPixelRatio(pr); renderer.setSize(sz.x, sz.y, false); void bg; return cv.toDataURL('image/webp', .85);
+}
 const mapView = initMapView({ renderTop, maps: MAPS, getCur: () => curMap, getMe: () => ({ x: guardian.root.position.x, z: guardian.root.position.z, rot: guardian.root.rotation.y }) });
-window.__game = { mapView, openMapMenu, switchMap,  sound, breedsGrid, lineup, setTime: k => setTime(k, true), say, startRest, stopRest, openDogModal, swapDog, get rest() { return rest.on; }, test: { setPos: (x, z, r) => { guardian.root.position.set(x, heightAt(x, z), z); dog.root.position.set(x + .8, heightAt(x + .8, z + .8), z + .8); if (r !== undefined) yaw = r; }, setYaw: v => { yaw = v; }, setCam: (y, p, d) => { yaw = y; pitch = p; dist = d; }, getCam: () => [yaw, pitch, dist], get dog() { return dog.root; }, guardian: guardian.root, moveChar, get isWalkable() { return isWalkable; }, get heightAt() { return heightAt; }, get world() { return world; }, switchMap: id => switchMap(id), get map() { return curMap; } } }; // test: tools/walktest.mjs 용
+window.__game = { renderTop, renderDogThumb, BREEDS, mapView, openMapMenu, switchMap,  sound, breedsGrid, lineup, setTime: k => setTime(k, true), say, startRest, stopRest, openDogModal, swapDog, get rest() { return rest.on; }, test: { setPos: (x, z, r) => { guardian.root.position.set(x, heightAt(x, z), z); dog.root.position.set(x + .8, heightAt(x + .8, z + .8), z + .8); if (r !== undefined) yaw = r; }, setYaw: v => { yaw = v; }, setCam: (y, p, d) => { yaw = y; pitch = p; dist = d; }, getCam: () => [yaw, pitch, dist], get dog() { return dog.root; }, guardian: guardian.root, moveChar, get isWalkable() { return isWalkable; }, get heightAt() { return heightAt; }, get world() { return world; }, switchMap: id => switchMap(id), get map() { return curMap; } } }; // test: tools/walktest.mjs 용
 
 setLoad(100, '들어가는 중');
 frame();

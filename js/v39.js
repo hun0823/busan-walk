@@ -105,7 +105,7 @@ export function addV39(X) {
         float brk = smoothstep(.5,.6,s) * (1.-smoothstep(.66,.74,s)) * (.6 + .4*sin(vWp.x*.7 + uT*1.7 + n*3.));
         float f = clamp(foam*.85 + brk, 0., 1.) * uFoam;
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.97,.99,1.), f);
-        diffuseColor.a = mix(1., .1, smoothstep(.03, .55, s)) ; diffuseColor.a = max(diffuseColor.a, f*.9);`);
+        diffuseColor.a = mix(1., 0., smoothstep(.04, .64, s)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.62,.78,.74), smoothstep(.35,.64,s)*.5); // v3.9g: 물가로 갈수록 완전히 투명 + 모래빛 옅은 물(연출) diffuseColor.a = max(diffuseColor.a, f*.9);`);
     };
     sm.needsUpdate = true;
     ups.push(t => { su.uT.value = t; });
