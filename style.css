@@ -140,3 +140,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0b1530;font-family:
 .top-left #title{min-width:0!important;flex:1 1 auto!important;overflow:hidden;white-space:nowrap}
 .top-left #title .mapnm{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .top-left .srv{flex:0 0 auto!important}}
+
+/* v3.9r 배경음악 목록 */
+#bgmPanel{width:min(92vw,340px)}#bgmList{display:flex;flex-direction:column;gap:2px;margin:6px 0}
+.card button.bgmi{display:flex;align-items:center;gap:8px;width:100%;text-align:left}.card button.bgmi span{width:14px;opacity:.85}.card button.bgmi small{margin-left:auto;opacity:.7;font-size:11px}.card button.bgmi.on{background:rgba(255,255,255,.3)}

@@ -5,7 +5,7 @@
 // 데이터: 공원 경계·경관수로·보행로·잔디·다리 윤곽·도로·건물 윤곽·해안선(육지 판정)·일부 나무 점.
 // 연출(데이터에 없음): 건물 높이·색, 다리 높이·난간 디테일, 나무 대부분, 가로등, 팜파스, 먼 대교·섬 실루엣, 수로, 물고기·상어·항만 크레인·정박선 경관조명, 지형 평탄.
 import * as THREE from 'three';
-import { fishBodyGeo, fishTailGeo } from './v39g.js?v=39q';
+import { fishBodyGeo, fishTailGeo } from './v39g.js?v=39r';
 export const S = 0.3;
 const DATA = await (await fetch('data/bukhang.json')).json();
 const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: .85, metalness: 0, ...o });

@@ -1,7 +1,7 @@
 // 맵 레지스트리 + 걷기/높이 함수 파사드(현재 맵으로 교체되는 live binding)
 import * as THREE from 'three';
-import { buildWorld, isWalkable as bkWalk, heightAt as bkHeight } from './world.js?v=39q';
-import { buildGenWorld } from './world-gen.js?v=39q';
+import { buildWorld, isWalkable as bkWalk, heightAt as bkHeight } from './world.js?v=39r';
+import { buildGenWorld } from './world-gen.js?v=39r';
 export const MAPS = [
   { id: 'bukhang', name: '북항 친수공원', sub: '01', desc: '수로·다리·유리 데크' },
   { id: 'gwangalli', name: '광안리', sub: '02', desc: '해변 · 광안대교' },
