@@ -92,7 +92,10 @@ export function makeGuardian() {
   }
   const hand = new THREE.Object3D(); hand.position.y = -.34; arms[0].add(hand); // 왼손 목줄
   shadow(root);
-  return { root, hand, body, arms, animate(t, walk, sit) {
+  return { root, hand, body, arms, animate(t, walk, sit, pose) {
+    body.rotation.x = 0;
+    if (sit && pose === 'lie') { legs[0].rotation.x = legs[1].rotation.x = 0; arms[0].rotation.x = arms[1].rotation.x = 0; body.rotation.z = Math.PI / 2; body.position.y = .27 + Math.sin(t * 1.6) * .006; return; } // v3.9m 돗자리에 눕기
+    if (sit && pose === 'chair') { legs[0].rotation.x = legs[1].rotation.x = -1.45; arms[0].rotation.x = arms[1].rotation.x = -.5; body.position.y = .06; body.rotation.z = 0; body.rotation.x = -.12; return; } // v3.9m 캠핑의자에 앉기
     if (sit) { legs[0].rotation.x = legs[1].rotation.x = -1.45; arms[0].rotation.x = arms[1].rotation.x = -.35; body.position.y = -.36; body.rotation.z = 0; return; }
     const s = walk ? Math.sin(t * 9) : 0;
     legs[0].rotation.x = s * .55; legs[1].rotation.x = -s * .55;
@@ -194,13 +197,14 @@ export function makeDog(breed = {}) {
   else if (T === 'pom') { const st = new THREE.Mesh(new THREE.CapsuleGeometry(.03, .1, 4, 8), fur); st.rotation.x = -.5; st.position.set(0, .05, -.03); tail.add(st); const pm = new THREE.Mesh(puffGeo(.08, 20, .08, 12), fur); pm.position.set(0, .14, -.07); tail.add(pm); }
   else { const t = new THREE.Mesh(puffGeo(.1, 24, .08, 12), fur); t.scale.set(1, 1.1, 1.6); t.rotation.x = .9; t.position.set(0, .1, .02); tail.add(t); } // plume: 등 위 깃털
   shadow(root);
-  return { root, collar, headG, breed: B, animate(t, st) {
+  return { root, collar, headG, breed: B, animate(t, st, lie) {
     const f = st === 'run' ? 16 : 11, a = st === 'run' ? .7 : st === 'walk' ? .45 : 0;
     const s = Math.sin(t * f);
     legs[0].rotation.x = s * a; legs[3].rotation.x = s * a; legs[1].rotation.x = -s * a; legs[2].rotation.x = -s * a;
     tail.position.x = Math.sin(t * (st === 'pet' || st === 'treat' ? 25 : 8)) * .05;
     body.position.y = a ? Math.abs(Math.cos(t * f)) * (st === 'run' ? .1 : .03) : 0;
     body.rotation.x = 0; headG.rotation.set(0, 0, 0);
+    if (st === 'sit' && lie) { body.position.y = -.17; legs[0].rotation.x = legs[1].rotation.x = -1.45; legs[2].rotation.x = legs[3].rotation.x = 1.45; headG.rotation.x = .15 + Math.sin(t * 1.2) * .03; return; } // v3.9m 엎드리기
     if (st === 'sit') { body.rotation.x = -.4; body.position.y = -.04; legs[2].rotation.x = legs[3].rotation.x = -1.1; }
     if (st === 'pet') { headG.rotation.z = Math.sin(t * 6) * .22; body.position.y = Math.abs(Math.sin(t * 8)) * .04; }
     if (st === 'treat') { body.position.y = Math.abs(Math.sin(t * 10)) * .2; headG.rotation.x = Math.sin(t * 20) * .12; }

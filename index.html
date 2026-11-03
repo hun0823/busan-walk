@@ -2,14 +2,14 @@
 <html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>부산 산책 | 북항 친수공원</title>
-<link rel="stylesheet" href="style.css?v=39l">
+<link rel="stylesheet" href="style.css?v=39m">
 <link rel="icon" href="data:,">
 <script>/* v3.9d: 로딩 단계 문구 */ window.__steps=[];window.__step=function(t){__steps.push([Math.round(performance.now()),t]);var l=document.querySelector('#loading p');if(l)l.textContent='산책 준비 중… '+t;};
 /* v3.9c: 로딩 중 오류를 로딩 화면에 표시(멈춘 진행바 대신) */
 window.__loadErr=function(m,soft){var l=document.getElementById('loading');if(!l||l.style.display==='none'||l.classList.contains('hide'))return;var p=document.getElementById('loaderr');if(!p){p=document.createElement('p');p.id='loaderr';p.style.cssText='color:#c0392b;font-size:12px;max-width:80vw;margin:8px auto 0;word-break:break-all';l.appendChild(p);}p.textContent=(soft?'':'오류: ')+String(m).slice(0,160)+(soft?'':' · 새로고침해 주세요');};
 addEventListener('error',function(e){__loadErr(e.message||'스크립트 오류');});addEventListener('unhandledrejection',function(e){__loadErr((e.reason&&e.reason.message)||e.reason||'불러오기 실패');});
 if(!(HTMLScriptElement.supports&&HTMLScriptElement.supports('importmap')))addEventListener('DOMContentLoaded',function(){__loadErr('이 브라우저는 importmap을 지원하지 않습니다(Safari 16.4 이상 필요)');});</script>
-<script type="importmap">{"imports":{"three":"./vendor/three.module.js?v=39l"}}</script>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js?v=39m"}}</script>
 <style>body.topview .glass,body.topview .bubble{display:none!important}</style></head><body>
 <div id="loading"><h1 class="busan">BUSAN</h1><div class="track"><svg class="veh train" viewBox="0 0 200 40" aria-hidden="true"><g fill="#ffd38a"><rect x="4" y="8" width="56" height="24" rx="6"/><rect x="66" y="8" width="56" height="24" rx="4"/><rect x="128" y="8" width="56" height="24" rx="4"/><path d="M184 32V14q0-6 8-6h4v24z"/></g><g fill="#0b1530" opacity=".55"><rect x="12" y="13" width="12" height="8" rx="2"/><rect x="30" y="13" width="12" height="8" rx="2"/><rect x="74" y="13" width="12" height="8" rx="2"/><rect x="92" y="13" width="12" height="8" rx="2"/><rect x="136" y="13" width="12" height="8" rx="2"/><rect x="154" y="13" width="12" height="8" rx="2"/></g><g fill="#e98b5a"><circle cx="16" cy="34" r="4"/><circle cx="48" cy="34" r="4"/><circle cx="78" cy="34" r="4"/><circle cx="110" cy="34" r="4"/><circle cx="140" cy="34" r="4"/><circle cx="172" cy="34" r="4"/></g></svg></div><div class="tag">부산 여행하러 가는 중</div><div class="bar"><i id="loadbar"></i></div><p>산책 준비 중…</p></div>
 <div id="app"></div>
@@ -27,7 +27,7 @@ if(!(HTMLScriptElement.supports&&HTMLScriptElement.supports('importmap')))addEve
 <div id="infoPanel" class="glass panel card"><h3>지도·연출 정보</h3><p>지도 데이터 © OpenStreetMap contributors (ODbL) · 고도 Copernicus DEM(Open-Meteo) · Map data © OpenStreetMap contributors (ODbL) · 지도 축척 0.3배 · 해안선·부두 육지는 OSM(map.osm)</p><p>연출(실제와 다름): 건물 높이·나무·관목·가로등·야생화·풀포기·먼 풍경·부산항대교(북항대교) 크기·거리·다리 난간·조명·아치·물고기·상어·항만 크레인·배·유리 바닥 데크·달·별·돗자리</p><p>WASD/방향키 이동 · 바닥 클릭 이동</p><button data-close>닫기</button></div>
 <div id="dogModal" class="glass panel card dog"><h3>우리 강아지</h3><div id="dogPrev"><img alt="선택한 강아지"><b></b></div><label>이름 <input id="dogName" maxlength="8" placeholder="바다"></label><div id="breedList"></div><button id="dogOk" class="ok">정했어요</button></div>
 <div id="adminPanel" class="glass panel card admin"><h3>관리자</h3><div class="row"><button data-ph="morning">🌅 아침</button><button data-ph="noon">☀️ 점심</button><button data-ph="evening">🌇 저녁</button><button data-ph="auto">자동</button></div><button id="admPause">자동 순환 일시정지</button><button id="admDrone">🛸 드론쇼 시작</button><p id="admState"></p><button id="admClose">닫기</button></div>
-<div id="bagPanel" class="glass panel card bag"><h3>🎒 가방 · 꾸미기 <button class="x" data-close>✕</button></h3><p>직접 만든 3D 소품(연출). 착용 상태는 이 기기에 저장돼요. 옷·모자는 다른 유저에게도 보이고, 돗자리·의자는 내 화면에만 놓여요.</p><div id="bagList"></div><button id="bagOff">모두 벗기</button></div>
+<div id="bagPanel" class="glass panel card bag"><h3>🎒 가방 · 꾸미기 <button class="x" data-close>✕</button></h3><p>직접 만든 3D 소품(연출). 착용 상태는 이 기기에 저장돼요. 옷·모자는 다른 유저에게도 보여요. 휴식 아이템(돗자리·캠핑의자)은 휴식하기를 누를 때만 펼쳐지고 상대에게도 보여요.</p><div id="bagList"></div><button id="bagOff">모두 벗기</button></div>
 <div id="toast" class="glass toast hidden"></div>
 <div id="bubble" class="bubble hidden">멍!</div>
 <div class="glass bottom-bar">
@@ -40,5 +40,5 @@ if(!(HTMLScriptElement.supports&&HTMLScriptElement.supports('importmap')))addEve
 </div>
 <div id="flash"></div>
 <div class="note">일부 연출 · 지도 출처는 🐾 › ⓘ</div>
-<script type="module" src="js/main.js?v=39l"></script>
+<script type="module" src="js/main.js?v=39m"></script>
 </body></html>

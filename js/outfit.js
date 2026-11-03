@@ -1,6 +1,6 @@
 // v3.9l 꾸미기(가방): 모든 아이템은 Three.js 기본 도형으로 직접 만든 모델(외부 에셋 없음). 색·모양은 연출.
 import * as THREE from 'three';
-import { makeMat } from './mat.js?v=39l';
+import { makeMat } from './mat.js?v=39m';
 const M = (c, o = {}) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: .85, metalness: 0 }, o));
 const mesh = (g, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = true; return o; };
 const lathe = (pts, m, seg = 40) => new THREE.Mesh(new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg), m);
@@ -12,8 +12,7 @@ export const SLOTS = [
   { k: 'back', name: '등', items: [['cape', '망토', '🦸'], ['bag', '미니 백팩', '🎒']] },
   { k: 'neck', name: '목', items: [['scarf', '목도리', '🧣']] },
   { k: 'dog', name: '강아지 모자', items: [['party', '고깔모자', '🥳'], ['dstraw', '미니 밀짚', '👒']] },
-  { k: 'mat', name: '옆에 두기 · 돗자리', items: [['mat', '돗자리', '🧺']] },
-  { k: 'chair', name: '옆에 두기 · 캠핑의자', items: [['chair', '캠핑의자', '🪑']] },
+  { k: 'rest', name: '휴식 아이템 · 휴식하기 때 펼쳐요', items: [['mat', '돗자리(눕기)', '🧺'], ['chair', '캠핑의자', '🪑']] },
 ];
 export const encode = o => SLOTS.map(s => { const i = s.items.findIndex(x => x[0] === o[s.k]); return (i + 1).toString(36); }).join('');
 export const decode = c => { const o = {}; SLOTS.forEach((s, i) => { const n = parseInt((c || '')[i] || '0', 36) || 0; if (n && s.items[n - 1]) o[s.k] = s.items[n - 1][0]; }); return o; };
@@ -46,5 +45,5 @@ export function applyOutfit(ch, dg, o) {
   for (const k of ['head', 'eyes', 'top', 'back', 'neck']) if (o[k]) { const g = build(o[k]); ch.body.add(g); ch._ofG.push(g); if (g.userData.sleeve) for (const a of ch.arms) { const s = mesh(new THREE.CapsuleGeometry(.088, .14, 6, 12), M(g.userData.sleeve, { roughness: 1 }), 0, -.13); a.add(s); ch._ofS.push(s); } }
   if (dg && o.dog) { const g = build(o.dog); if (o.dog === 'dstraw') g.position.y = .25 - 1.34 * .55; dg.headG.add(g); dg._of.push(g); }
 }
-// 땅에 놓는 아이템(돗자리·캠핑의자): 내 화면에만
+// 휴식 때 바닥에 놓는 아이템(돗자리·캠핑의자)
 export function makeGroundItem(id) { return build(id); }
