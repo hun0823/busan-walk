@@ -160,4 +160,4 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0b1530;font-family:
  .top-right button,.top-right .tlbl{padding:0 6px!important}
  .top-left #title{font-size:12px!important}.top-left .srv{font-size:10px!important}}
 @media (max-width:370px){.top-right button,.top-right .tlbl{padding:0 4px!important}.top-left .srv{font-size:9.5px!important}}
-.glass.top-hint{top:var(--tbt)!important;height:var(--tbh)!important;box-sizing:border-box;display:flex;align-items:center;padding-top:0!important;padding-bottom:0!important;border-radius:14px!important}.top-left .srv{border-left:1px solid rgba(255,255,255,.25)!important;border-radius:0!important}
+@media (min-width:641px){.glass.top-hint{top:var(--tbt)!important;height:var(--tbh)!important;box-sizing:border-box;display:flex;align-items:center;padding-top:0!important;padding-bottom:0!important;border-radius:14px!important}}.top-left .srv{border-left:1px solid rgba(255,255,255,.25)!important;border-radius:0!important}
