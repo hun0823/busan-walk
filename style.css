@@ -144,3 +144,20 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0b1530;font-family:
 /* v3.9r 배경음악 목록 */
 #bgmPanel{width:min(92vw,340px)}#bgmList{display:flex;flex-direction:column;gap:2px;margin:6px 0}
 .card button.bgmi{display:flex;align-items:center;gap:8px;width:100%;text-align:left}.card button.bgmi span{width:14px;opacity:.85}.card button.bgmi small{margin-left:auto;opacity:.7;font-size:11px}.card button.bgmi.on{background:rgba(255,255,255,.3)}
+/* v3.9s 상단 탭 한 줄: 좌·우 탭 같은 줄·같은 높이, 폰에서는 좌측 탭이 우측 탭까지 이어짐 */
+:root{--tbh:34px;--tbt:10px;--tbg:6px}
+.glass.top-left,.glass.top-right{top:var(--tbt)!important;height:var(--tbh)!important;min-height:0!important;box-sizing:border-box!important;display:flex!important;align-items:center!important;border-radius:14px!important;flex-wrap:nowrap!important}
+.glass.top-left{left:10px!important;padding:0 10px!important}
+.glass.top-right{right:10px!important;padding:0 3px!important;gap:0!important}
+.top-right button,.top-right .tlbl{height:calc(var(--tbh) - 6px);padding:0 8px!important;display:inline-flex;align-items:center;line-height:1}
+.top-left #title .brand,.top-left #title .sep{display:none!important}
+.top-left #title{font-size:13px!important;min-width:0!important;flex:1 1 auto!important;overflow:hidden;white-space:nowrap}
+.top-left #title .mapnm{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top-left .srv{flex:0 0 auto!important;font-size:11px!important}
+@media (max-width:640px){:root{--tbh:32px;--tbt:8px}
+ .glass.top-left{left:8px!important;padding:0 8px!important;gap:5px!important;max-width:none!important;right:calc(8px + var(--trw,190px) + var(--tbg))!important;overflow:hidden}
+ .glass.top-right{right:8px!important}
+ .top-right button,.top-right .tlbl{padding:0 6px!important}
+ .top-left #title{font-size:12px!important}.top-left .srv{font-size:10px!important}}
+@media (max-width:370px){.top-right button,.top-right .tlbl{padding:0 4px!important}.top-left .srv{font-size:9.5px!important}}
+.glass.top-hint{top:var(--tbt)!important;height:var(--tbh)!important;box-sizing:border-box;display:flex;align-items:center;padding-top:0!important;padding-bottom:0!important;border-radius:14px!important}.top-left .srv{border-left:1px solid rgba(255,255,255,.25)!important;border-radius:0!important}
