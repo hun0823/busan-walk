@@ -172,7 +172,7 @@ export function makeDog(breed = {}) {
     headG.add(clumps(fur, hp, .03, 1)); body.add(clumps(fur, bp, .033, 1)); // 저폴리 구슬(8×6)로 삼각형 예산 유지
   }
   // 스카프 + 앞 리본 매듭 (모든 견종 공통)
-  const scf = new THREE.Group(); scf.position.set(0, dy - .01, bz * .3 + .05); scf.scale.setScalar(Math.max(1, B.girth * .95)); body.add(scf);
+  const scf = new THREE.Group(); scf.position.set(0, dy - .01, bz * .3 + .05); scf.scale.setScalar(Math.max(1, B.girth * .95)); scf.visible = false; body.add(scf); // v3.9n: 목 리본 제거(모든 견종)
   const sc = new THREE.Mesh(new THREE.TorusGeometry(.19, .05, 12, 30), scarf); sc.rotation.x = Math.PI / 2 + .5; sc.position.set(0, .53, .14); scf.add(sc);
   const knot = new THREE.Mesh(new THREE.SphereGeometry(.04, 14, 10), scarf); knot.position.set(0, .46, .33); knot.scale.setScalar(1.25); scf.add(knot);
   for (const s of [-1, 1]) {
