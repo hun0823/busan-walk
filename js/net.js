@@ -3,7 +3,7 @@ export const NetState = Object.freeze({ OFFLINE_SOLO: 'offline_solo', CONNECTING
 const VIEW = {
   offline_solo: { cls: 'off', text: () => '오프라인 · 맵 이동' },
   connecting: { cls: 'wait', text: () => '서버 · 연결 중…' },
-  online: { cls: 'on', text: (n, no) => `온라인 · ${no ? String(no).padStart(2, '0') + '번 서버 · ' : ''}${n}명` },
+  online: { cls: 'on', text: (n, no) => (typeof matchMedia === 'function' && matchMedia('(max-width:640px)').matches) ? `${no ? String(no).padStart(2, '0') + '서버 · ' : ''}${n}명` : `온라인 · ${no ? String(no).padStart(2, '0') + '번 서버 · ' : ''}${n}명` }, // v3.9q: 폰은 짧게
   error: { cls: 'err', text: () => '오프라인 · 연결 실패(혼자 플레이)' },
 };
 export function initNetStatus(el) {

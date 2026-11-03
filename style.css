@@ -130,3 +130,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0b1530;font-family:
 .top-left{flex-wrap:nowrap!important;width:auto!important;border-radius:14px!important;padding:3px 9px!important;top:8px!important;left:8px!important}
 .top-left #title{flex:0 1 auto!important;font-size:12px!important}
 .top-left .srv{white-space:nowrap;font-size:9.5px!important;border-left:1px solid rgba(255,255,255,.25)!important;padding-left:6px!important}
+
+/* v3.9p: 🐾 메뉴 외부 링크(강아지 만나러가기) — 메뉴 버튼과 같은 유리 스타일 */
+.menu a.mlink{display:block;background:rgba(255,255,255,.14);color:#fff;font:inherit;font-size:13px;padding:10px 14px;border-radius:12px;text-decoration:none;text-align:left;min-height:40px;margin:2px;box-sizing:border-box;line-height:20px}
+.menu a.mlink:hover{background:rgba(255,255,255,.24)}.menu a.mlink .ext{opacity:.75;font-size:11px;margin-left:4px}
+
+/* v3.9q: 폰 좌상단 탭 — 긴 맵 이름은 말줄임, 서버 표시는 줄지 않게(겹침 방지) */
+@media (max-width:640px){.top-left{max-width:calc(100vw - 204px)!important;overflow:hidden}
+.top-left #title{min-width:0!important;flex:1 1 auto!important;overflow:hidden;white-space:nowrap}
+.top-left #title .mapnm{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top-left .srv{flex:0 0 auto!important}}

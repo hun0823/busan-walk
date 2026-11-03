@@ -2,17 +2,17 @@
 // 모든 모델/텍스처/사운드는 Three.js 기본 도형과 절차 생성으로 직접 제작. (외부 에셋 없음)
 // 월드 배치는 실제 지도가 아니라 상상 구성(연출)이다. 요소 목록만 디자이너 전달 자료 기준.
 import * as THREE from 'three';
-import { S as MAP_SCALE } from './world.js?v=39o';
-import { MAPS, mapById, getWorld, setActive, isWalkable, heightAt } from './maps.js?v=39o';
-import { makeGuardian, makeDog } from './characters.js?v=39o';
-import { initMapView } from './mapview.js?v=39o';
-import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js?v=39o';
-import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js?v=39o';
-import { NetState, initNetStatus, NetClient, ANIM, SAY_TEXT } from './net.js?v=39o';
-import { SERVER_URL, NET } from './config.js?v=39o';
-import { makeMat } from './mat.js?v=39o';
-import { SLOTS, encode, decode, applyOutfit, makeGroundItem } from './outfit.js?v=39o';
-import { BgSound } from './sound.js?v=39o';
+import { S as MAP_SCALE } from './world.js?v=39q';
+import { MAPS, mapById, getWorld, setActive, isWalkable, heightAt } from './maps.js?v=39q';
+import { makeGuardian, makeDog } from './characters.js?v=39q';
+import { initMapView } from './mapview.js?v=39q';
+import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js?v=39q';
+import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js?v=39q';
+import { NetState, initNetStatus, NetClient, ANIM, SAY_TEXT } from './net.js?v=39q';
+import { SERVER_URL, NET } from './config.js?v=39q';
+import { makeMat } from './mat.js?v=39q';
+import { SLOTS, encode, decode, applyOutfit, makeGroundItem } from './outfit.js?v=39q';
+import { BgSound } from './sound.js?v=39q';
 
 const $ = s => document.querySelector(s);
 const setLoad = (p, t) => { $('#loadbar').style.width = p + '%'; if (t && window.__step) window.__step(t); };
@@ -278,13 +278,13 @@ function openDogModal() {
   const list = $('#breedList'); list.innerHTML = '';
   for (const b of BREEDS) {
     const el = document.createElement('button'); el.className = 'breed' + (b.id === pickBreed ? ' on' : ''); el.dataset.id = b.id;
-    el.innerHTML = `<i style="background:linear-gradient(135deg,${b.color} 55%,${b.color2} 55%)"><img src="assets/breeds/${b.id}.webp?v=39o" alt="" loading="eager" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('em'),{textContent:'🐶'}))"></i><b>${b.name}</b><small>${{ drop: '처진 귀', erect: '쫑긋 귀', big: '큰 귀', semi: '반 선 귀', button: '단추 귀', bat: '박쥐 귀' }[b.ear]} · ${(b.size||1) >= 1.1 ? '큰 개' : (b.size||1) <= .9 ? '작은 개' : '중간'}</small>`;
+    el.innerHTML = `<i style="background:linear-gradient(135deg,${b.color} 55%,${b.color2} 55%)"><img src="assets/breeds/${b.id}.webp?v=39q" alt="" loading="eager" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('em'),{textContent:'🐶'}))"></i><b>${b.name}</b><small>${{ drop: '처진 귀', erect: '쫑긋 귀', big: '큰 귀', semi: '반 선 귀', button: '단추 귀', bat: '박쥐 귀' }[b.ear]} · ${(b.size||1) >= 1.1 ? '큰 개' : (b.size||1) <= .9 ? '작은 개' : '중간'}</small>`;
     el.onclick = () => { pickBreed = b.id; setPrev(b); list.querySelectorAll('.breed').forEach(x => x.classList.toggle('on', x === el)); swapDog(b.id); };
     list.appendChild(el);
   }
   setPrev(BREEDS.find(b => b.id === pickBreed) || BREEDS[0]); openPanel('dogModal');
 }
-function setPrev(b) { const p = $('#dogPrev'); p.querySelector('img').src = `assets/breeds/${b.id}.webp?v=39o`; p.querySelector('b').textContent = b.name; } // v3.9g: 선택 강아지 미리보기(미리 캡처한 인게임 모델 이미지)
+function setPrev(b) { const p = $('#dogPrev'); p.querySelector('img').src = `assets/breeds/${b.id}.webp?v=39q`; p.querySelector('b').textContent = b.name; } // v3.9g: 선택 강아지 미리보기(미리 캡처한 인게임 모델 이미지)
 $('#dogOk').onclick = () => {
   dogName = ($('#dogName').value.trim() || '바다').slice(0, 8); LS.set('bw.dogName', dogName); LS.set('bw.breed', pickBreed); if (pickBreed !== breedId) swapDog(pickBreed); if (_srvUrl) netc.connect(helloMsg());
   openPanel(null); say(`나 · ${dogName}`, 3);
