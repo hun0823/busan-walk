@@ -2,16 +2,16 @@
 // 모든 모델/텍스처/사운드는 Three.js 기본 도형과 절차 생성으로 직접 제작. (외부 에셋 없음)
 // 월드 배치는 실제 지도가 아니라 상상 구성(연출)이다. 요소 목록만 디자이너 전달 자료 기준.
 import * as THREE from 'three';
-import { S as MAP_SCALE } from './world.js?v=39i';
-import { MAPS, mapById, getWorld, setActive, isWalkable, heightAt } from './maps.js?v=39i';
-import { makeGuardian, makeDog } from './characters.js?v=39i';
-import { initMapView } from './mapview.js?v=39i';
-import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js?v=39i';
-import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js?v=39i';
-import { NetState, initNetStatus, NetClient, ANIM, SAY_TEXT } from './net.js?v=39i';
-import { SERVER_URL, NET } from './config.js?v=39i';
-import { makeMat } from './mat.js?v=39i';
-import { BgSound } from './sound.js?v=39i';
+import { S as MAP_SCALE } from './world.js?v=39j';
+import { MAPS, mapById, getWorld, setActive, isWalkable, heightAt } from './maps.js?v=39j';
+import { makeGuardian, makeDog } from './characters.js?v=39j';
+import { initMapView } from './mapview.js?v=39j';
+import { TIMES, PHASES, PHASE_LABEL, phaseAt, presetFor, lerpPreset, applyTime } from './times.js?v=39j';
+import { BREEDS, breedById, DEFAULT_BREED } from './breeds.js?v=39j';
+import { NetState, initNetStatus, NetClient, ANIM, SAY_TEXT } from './net.js?v=39j';
+import { SERVER_URL, NET } from './config.js?v=39j';
+import { makeMat } from './mat.js?v=39j';
+import { BgSound } from './sound.js?v=39j';
 
 const $ = s => document.querySelector(s);
 const setLoad = (p, t) => { $('#loadbar').style.width = p + '%'; if (t && window.__step) window.__step(t); };
@@ -61,8 +61,13 @@ let dog = makeDog(breedById(breedId)); scene.add(dog.root);
 function swapDog(id) { const old = dog; dog = makeDog(breedById(id)); dog.root.position.copy(old.root.position); dog.root.rotation.y = old.root.rotation.y; scene.remove(old.root); scene.add(dog.root); breedId = id; }
 // 캐릭터 보조 라이트(약하게, 밤에도 칙칙하지 않게)
 const charFill = new THREE.PointLight(0xffe2c0, 1.2, 6, 1.5); scene.add(charFill);
-const randStart = w => { const b = w.start; for (let i = 0; i < 24; i++) { const r = 3 + Math.random() * 3, t = Math.random() * 6.2832, x = b.x + Math.sin(t) * r, z = b.z + Math.cos(t) * r; if (w.isWalkable(x, z) && w.isWalkable(x - Math.sin(b.rot) * 0.9, z - Math.cos(b.rot) * 0.9)) return { x, z, rot: b.rot }; } return b; }; // v3.9f: 시작점 반경 3~6m 무작위(겹침 방지), 저장 위치 우선
-const _sp0 = (!_q0m.has('fresh') && savedPos(curMap) && world.isWalkable(savedPos(curMap).x, savedPos(curMap).z)) ? savedPos(curMap) : randStart(world);
+// v3.9j: 시작점에서 걸어서 닿는 영역(4방향 BFS, 0.3m 격자)을 한 번 계산해 캐시 → 무작위 시작/저장 위치가 건물 사이 고립 구역이면 버림
+const reachOf = w => { if (w._reach) return w._reach; const b = w.start, h = .3, R = 260, N = Math.ceil(2 * R / h), M = new Uint8Array(N * N), W = w.isWalkable;
+  const ix = (x, z) => { const i = Math.round((x - b.x + R) / h), j = Math.round((z - b.z + R) / h); return i < 0 || j < 0 || i >= N || j >= N ? -1 : i * N + j; };
+  const k0 = ix(b.x, b.z); if (W(b.x, b.z)) { const q = [k0]; M[k0] = 1; while (q.length) { const k = q.pop(), i = (k / N) | 0, j = k % N; for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const a = i + di, c = j + dj; if (a < 0 || c < 0 || a >= N || c >= N) continue; const kk = a * N + c; if (M[kk]) continue; if (!W(b.x - R + a * h, b.z - R + c * h)) { M[kk] = 2; continue; } M[kk] = 1; q.push(kk); } } }
+  return (w._reach = (x, z) => { const k = ix(x, z); return k >= 0 && M[k] === 1; }); };
+const randStart = w => { const b = w.start; const ok = reachOf(w); for (let i = 0; i < 24; i++) { const r = 3 + Math.random() * 3, t = Math.random() * 6.2832, x = b.x + Math.sin(t) * r, z = b.z + Math.cos(t) * r; if (w.isWalkable(x, z) && ok(x, z) && w.isWalkable(x - Math.sin(b.rot) * 0.9, z - Math.cos(b.rot) * 0.9)) return { x, z, rot: b.rot }; } return b; }; // v3.9f: 시작점 반경 3~6m 무작위(겹침 방지), 저장 위치 우선
+const _sp0 = (!_q0m.has('fresh') && savedPos(curMap) && world.isWalkable(savedPos(curMap).x, savedPos(curMap).z) && reachOf(world)(savedPos(curMap).x, savedPos(curMap).z)) ? savedPos(curMap) : randStart(world);
 const start = new THREE.Vector3(_sp0.x, heightAt(_sp0.x, _sp0.z), _sp0.z); // 남서 입구 근처 보행로(OSM)
 guardian.root.position.copy(start);
 guardian.root.rotation.y = _sp0.rot; // 북동쪽(수로 방향)
@@ -257,13 +262,13 @@ function openDogModal() {
   const list = $('#breedList'); list.innerHTML = '';
   for (const b of BREEDS) {
     const el = document.createElement('button'); el.className = 'breed' + (b.id === pickBreed ? ' on' : ''); el.dataset.id = b.id;
-    el.innerHTML = `<i style="background:linear-gradient(135deg,${b.color} 55%,${b.color2} 55%)"><img src="assets/breeds/${b.id}.webp?v=39i" alt="" loading="eager" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('em'),{textContent:'🐶'}))"></i><b>${b.name}</b><small>${{ drop: '처진 귀', erect: '쫑긋 귀', big: '큰 귀', semi: '반 선 귀', button: '단추 귀', bat: '박쥐 귀' }[b.ear]} · ${(b.size||1) >= 1.1 ? '큰 개' : (b.size||1) <= .9 ? '작은 개' : '중간'}</small>`;
+    el.innerHTML = `<i style="background:linear-gradient(135deg,${b.color} 55%,${b.color2} 55%)"><img src="assets/breeds/${b.id}.webp?v=39j" alt="" loading="eager" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('em'),{textContent:'🐶'}))"></i><b>${b.name}</b><small>${{ drop: '처진 귀', erect: '쫑긋 귀', big: '큰 귀', semi: '반 선 귀', button: '단추 귀', bat: '박쥐 귀' }[b.ear]} · ${(b.size||1) >= 1.1 ? '큰 개' : (b.size||1) <= .9 ? '작은 개' : '중간'}</small>`;
     el.onclick = () => { pickBreed = b.id; setPrev(b); list.querySelectorAll('.breed').forEach(x => x.classList.toggle('on', x === el)); swapDog(b.id); };
     list.appendChild(el);
   }
   setPrev(BREEDS.find(b => b.id === pickBreed) || BREEDS[0]); openPanel('dogModal');
 }
-function setPrev(b) { const p = $('#dogPrev'); p.querySelector('img').src = `assets/breeds/${b.id}.webp?v=39i`; p.querySelector('b').textContent = b.name; } // v3.9g: 선택 강아지 미리보기(미리 캡처한 인게임 모델 이미지)
+function setPrev(b) { const p = $('#dogPrev'); p.querySelector('img').src = `assets/breeds/${b.id}.webp?v=39j`; p.querySelector('b').textContent = b.name; } // v3.9g: 선택 강아지 미리보기(미리 캡처한 인게임 모델 이미지)
 $('#dogOk').onclick = () => {
   dogName = ($('#dogName').value.trim() || '바다').slice(0, 8); LS.set('bw.dogName', dogName); LS.set('bw.breed', pickBreed); if (pickBreed !== breedId) swapDog(pickBreed); if (_srvUrl) netc.connect(helloMsg());
   openPanel(null); say(`나 · ${dogName}`, 3);
@@ -455,16 +460,17 @@ setTitle(); LSm.set('bw.map', curMap);
 const savePos = () => { const p = guardian.root.position; LSm.set('bw.pos.' + curMap, `${p.x.toFixed(2)},${p.z.toFixed(2)},${guardian.root.rotation.y.toFixed(3)}`); };
 setInterval(savePos, 2000); addEventListener('pagehide', savePos);
 let switching = false;
+const GO_NAME = { bukhang: '북항친수공원', gwangalli: '광안리', hwangnyeong: '황령산', yonggungsa: '용궁사', gamcheon: '감천문화마을' }; // v3.9j 맵 이동 문구
 async function switchMap(id) {
   if (switching || id === curMap || !mapById(id)) { closeMapMenu(); return false; }
   switching = true; closeMapMenu(); savePos();
-  const fade = $('#mapFade'); fade.querySelector('b').textContent = mapById(id).name; fade.querySelector('small').textContent = '맵 불러오는 중…'; fade.classList.add('on');
+  const fade = $('#mapFade'); fade.querySelector('b').textContent = mapById(id).name; fade.querySelector('.go').textContent = (GO_NAME[id] || mapById(id).name) + ' 가는 중'; fade.querySelector('small').textContent = '맵 불러오는 중…'; fade.classList.add('on');
   await new Promise(r => setTimeout(r, 380)); // 페이드 인
   try {
     if (rest.on) stopRest();
     const w = await getWorld(id, scene);
     world = w; curMap = id; setActive(w); LSm.set('bw.map', id); setTitle();
-    const sp = savedPos(id); const s0 = sp && w.isWalkable(sp.x, sp.z) ? sp : randStart(w);
+    const sp = savedPos(id); const s0 = sp && w.isWalkable(sp.x, sp.z) && reachOf(w)(sp.x, sp.z) ? sp : randStart(w);
     guardian.root.position.set(s0.x, heightAt(s0.x, s0.z), s0.z); guardian.root.rotation.y = s0.rot;
     dog.root.position.set(s0.x - Math.sin(s0.rot) * .9, heightAt(s0.x, s0.z), s0.z - Math.cos(s0.rot) * .9); dog.root.rotation.y = s0.rot;
     camTarget.copy(guardian.root.position); yaw = s0.rot - Math.PI; moveTarget = null; if (marker) marker.visible = false;
@@ -528,7 +534,7 @@ function renderDogThumb(id, px = 256) {
   renderer.setPixelRatio(pr); renderer.setSize(sz.x, sz.y, false); void bg; return cv.toDataURL('image/webp', .85);
 }
 const mapView = initMapView({ renderTop, maps: MAPS, getCur: () => curMap, getMe: () => ({ x: guardian.root.position.x, z: guardian.root.position.z, rot: guardian.root.rotation.y }) });
-window.__game = { renderTop, renderDogThumb, BREEDS, mapView, openMapMenu, switchMap,  sound, breedsGrid, lineup, setTime: k => setTime(k, true), say, startRest, stopRest, openDogModal, swapDog, get rest() { return rest.on; }, test: { setPos: (x, z, r) => { guardian.root.position.set(x, heightAt(x, z), z); dog.root.position.set(x + .8, heightAt(x + .8, z + .8), z + .8); if (r !== undefined) yaw = r; }, setYaw: v => { yaw = v; }, setCam: (y, p, d) => { yaw = y; pitch = p; dist = d; }, getCam: () => [yaw, pitch, dist], get dog() { return dog.root; }, guardian: guardian.root, moveChar, get isWalkable() { return isWalkable; }, get heightAt() { return heightAt; }, get world() { return world; }, switchMap: id => switchMap(id), get map() { return curMap; }, get others() { return others; } } }; // test: tools/walktest.mjs 용
+window.__game = { renderTop, renderDogThumb, BREEDS, mapView, openMapMenu, switchMap,  sound, breedsGrid, lineup, setTime: k => setTime(k, true), say, startRest, stopRest, openDogModal, swapDog, get rest() { return rest.on; }, test: { setPos: (x, z, r) => { guardian.root.position.set(x, heightAt(x, z), z); dog.root.position.set(x + .8, heightAt(x + .8, z + .8), z + .8); if (r !== undefined) yaw = r; }, setYaw: v => { yaw = v; }, setCam: (y, p, d) => { yaw = y; pitch = p; dist = d; }, getCam: () => [yaw, pitch, dist], get dog() { return dog.root; }, guardian: guardian.root, moveChar, get isWalkable() { return isWalkable; }, get heightAt() { return heightAt; }, get world() { return world; }, reachOf, randStart, switchMap: id => switchMap(id), get map() { return curMap; }, get others() { return others; } } }; // test: tools/walktest.mjs 용
 
 setLoad(100, '들어가는 중');
 frame();
